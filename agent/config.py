@@ -29,13 +29,28 @@ DEFAULT_CONFIG = dict(
     # --- produzione ---
     target_stock_turns=1.5,        # produci per coprire 1.5 turni di vendite attese
     initial_sales_share=0.5,       # al turno 0: vendite attese = capacità/n_prodotti * share
-    stockout_boost=1.5,            # se vado sold-out, stimo domanda = vendite * 1.5
+    demand_estimator="adaptive",   # "adaptive" (crescita che accelera) | "ema" (vecchio: vendite*stockout_boost)
+    stockout_boost=1.5,            # solo per demand_estimator="ema"
+    stockout_boost_base=1.2,       # adaptive: boost = base^k con k = sold-out consecutivi (1.2, 1.44, 1.73...)
+    stockout_boost_max=2.5,        # tetto al boost
+    comp_rise_threshold=0.02,      # concorrenti +2% di prezzo rispetto al turno prima = "stanno alzando"
+    comp_rise_bonus=0.15,          # se alzano anche loro (scarsità), boost * 1.15
+    sales_down_alpha=0.5,          # se restano scorte, la stima scende veloce verso le vendite vere
 
     # --- aste ---
     bid_fraction=0.90,             # mai offrire più del 90% del valore marginale
     first_bid_fraction=0.75,       # turno 0 (nessuna info): offri 75% del tetto
-    bid_premium=0.05,              # offerta = prezzo d'aggiudicazione medio * (1 + premium)
-    premium_step=0.03,
+    price_forecast="holt",         # "holt" (livello + trend) | "ema" (vecchio: media semplice, in ritardo)
+    holt_alpha=0.5,                # peso del dato nuovo sul livello
+    holt_beta=0.3,                 # peso del cambiamento nuovo sul trend
+    holt_phi=0.9,                  # smorzamento del trend (1 = nessuno)
+    bid_rule="surplus_share",      # "premium": previsione*(1+premium) | "surplus_share": previsione + quota*(tetto - previsione)
+    bid_surplus_share=0.2,         # solo surplus_share: quota del margine (tetto - previsione) aggiunta all'offerta
+    bid_cap_over_last=0.20,        # mai offrire più del 20% sopra l'ultimo prezzo d'aggiudicazione (None = nessun tetto)
+    bid_premium=0.05,              # offerta = prezzo d'aggiudicazione previsto * (1 + premium)
+    premium_mode="ema",            # "ema" (media del tasso di vittoria) | "fast" (reagisce all'ultimo turno: nei test perde troppe aste)
+    premium_step=0.03,             # salita del premium quando si perde
+    premium_step_down=0.06,        # discesa del premium quando si vince tutto (solo "fast")
     premium_min=-0.30,
     premium_max=0.60,
     winrate_high=0.95,             # vinco quasi tutto → sto pagando troppo, abbasso
@@ -47,8 +62,58 @@ DEFAULT_CONFIG = dict(
 )
 
 # Copia "congelata" dell'ultima versione consegnata: usata come avversario nel torneo.
-# Quando fate una submission, copiate qui la config consegnata.
-STABLE_CONFIG = dict(DEFAULT_CONFIG)
+# Quando fate una submission, copiate qui la config consegnata COME DIZIONARIO LETTERALE
+# (non dict(DEFAULT_CONFIG), altrimenti cambia insieme ai default).
+STABLE_CONFIG = dict(  # versione v1 (prima di Holt e domanda adattiva), congelata come dizionario letterale
+    ema_alpha=0.3,
+    default_material_price=5.0,
+    margin_init=0.4,
+    margin_min=0.05,
+    margin_max=2.0,
+    margin_step=0.05,
+    sellthrough_high=0.9,
+    sellthrough_low=0.55,
+    market_band_low=0.15,
+    market_band_high=0.1,
+    use_demand_model=True,
+    demand_min_points=6,
+    demand_window=12,
+    demand_model_weight=0.5,
+    explore_turns=4,
+    explore_spread=0.08,
+    liquidation_turns=2,
+    liquidation_discount=0.15,
+    target_stock_turns=1.5,
+    initial_sales_share=0.5,
+    demand_estimator='ema',
+    stockout_boost=1.5,
+    stockout_boost_base=1.2,
+    stockout_boost_max=2.5,
+    comp_rise_threshold=0.02,
+    comp_rise_bonus=0.15,
+    sales_down_alpha=0.5,
+    bid_fraction=0.9,
+    bid_rule='premium',
+    bid_surplus_share=0.3,
+    bid_cap_over_last=None,
+    first_bid_fraction=0.75,
+    price_forecast='ema',
+    holt_alpha=0.5,
+    holt_beta=0.3,
+    holt_phi=0.9,
+    bid_premium=0.05,
+    premium_mode='ema',
+    premium_step=0.03,
+    premium_step_down=0.06,
+    premium_min=-0.3,
+    premium_max=0.6,
+    winrate_high=0.95,
+    winrate_low=0.6,
+    tier_low_share=0.3,
+    tier_discount=0.12,
+    endgame_turns=0,
+    cash_buffer=0.05,
+)
 
 
 def make_config(overrides=None):

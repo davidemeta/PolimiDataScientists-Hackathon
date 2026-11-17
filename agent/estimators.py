@@ -19,6 +19,36 @@ class EMA:
         return default if self.value is None else self.value
 
 
+class Holt:
+    """
+    Livellamento esponenziale doppio (metodo di Holt) con trend smorzato.
+      livello = alpha*x + (1-alpha)*(livello + phi*trend)       → dove si trova il prezzo
+      trend   = beta*(Δlivello) + (1-beta)*phi*trend             → di quanto cambia per turno
+      previsione(prossimo turno) = livello + phi*trend
+    Segue il prezzo sia in salita sia in discesa, senza il ritardo dell'EMA semplice.
+    phi < 1 smorza il trend, così non si estrapola all'infinito.
+    """
+
+    def __init__(self, alpha: float = 0.5, beta: float = 0.3, phi: float = 0.9):
+        self.alpha, self.beta, self.phi = alpha, beta, phi
+        self.level: Optional[float] = None
+        self.trend = 0.0
+
+    def update(self, x: float) -> float:
+        if self.level is None:
+            self.level = x
+            return self.forecast()
+        prev = self.level
+        self.level = self.alpha * x + (1 - self.alpha) * (self.level + self.phi * self.trend)
+        self.trend = self.beta * (self.level - prev) + (1 - self.beta) * self.phi * self.trend
+        return self.forecast()
+
+    def forecast(self) -> Optional[float]:
+        if self.level is None:
+            return None
+        return max(0.01, self.level + self.phi * self.trend)
+
+
 def linear_demand_fit(points: Sequence[Tuple[float, float]], min_points: int = 6
                       ) -> Optional[Tuple[float, float]]:
     """

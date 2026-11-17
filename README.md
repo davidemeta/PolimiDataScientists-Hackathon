@@ -60,19 +60,31 @@ run_game.py, run_tournament.py, tests/
 - **Non ottimizzate troppo sul simulatore di prova**: è un'approssimazione. Fidatevi di più di un miglioramento che vale su tutti i lineup che di un +20% su uno solo.
 - `SmartAgent(debug=True)` rilancia le eccezioni, e serve in sviluppo. **In submission lasciate `debug=False`.**
 
-## Risultati attuali (simulatore di prova, 20 partite, aste pay-as-bid)
+## Risultati attuali (simulatore di prova, aste pay-as-bid)
 
-Rank medio del nostro agente:
+**v2** (default) contro **v1** (`STABLE_CONFIG`, congelata). Verificato anche su 30 partite con seed mai usati per la taratura (1000-1029):
 
-| Lineup | Rank medio | Partecipanti | Note |
-|---|---|---|---|
-| mixed | 2.1 | 6 | **2°**: l'Undercutter vince 11/20 (media 13.3k contro i nostri 11.8k), noi 7/20 |
-| aggressive | 1.0 | 5 | vince 20/20 |
-| passive | 1.0 | 4 | vince 20/20 |
-| mirror / duel | ≈ media | 5 / 2 | oggi `stable` = stessa config, quindi è self-play |
+| Lineup | v1 rank / media / minimo | v2 rank / media / minimo |
+|---|---|---|
+| mixed | 2,57 / 11,1k / 1,2k | **1,00** / 17,2k / 11,4k |
+| aggressive | 1,00 / 18,4k / 8,6k | 1,00 / 14,3k / 9,2k |
+| passive | 1,00 / 26,2k / 22,6k | 1,00 / 33,0k / 28,5k |
+| mirror (contro 4 copie di v1) | 2,83 / 4,9k | **1,00** / 11,5k |
+| duel (contro v1) | — | vince **1,00** di rank medio |
 
-Rispetto alla prima versione (`target_stock_turns=1.2`, `stockout_boost=1.3`), la taratura attuale (1.5 / 1.5) vinceva 18/20 nel mirror e 19/20 nel duel.
+Sui seed di taratura (0-19), v2 vince 20 partite su 20 in tutti i lineup. Con le aste uniform il rank medio passa da 1,97 a 1,07.
 
-**Attenzione:** i valori 1.5 / 1.5 sono stati scelti sugli stessi 20 seed riportati qui, e hanno peggiorato il caso peggiore: il minimo in `aggressive` è circa 4.2k e in `mixed` circa 3.1k, entrambi sotto la cassa iniziale di 5k. **Sono valori provvisori**: non ottimizzate oltre sul simulatore di prova, ritarateli domani su quello vero.
+### Cosa è cambiato da v1 a v2 (ogni modifica ha un flag in config.py)
 
-Il rivale più pericoloso è l'**Undercutter**: produce a piena capacità e taglia i prezzi. Quando il mercato è scarso di prodotto, il volume conta. In mercati affollati di aggressivi, invece, produrre troppo fa male. È esattamente il tipo di compromesso che va ritarato sul simulatore vero.
+| Modifica | Flag | Effetto misurato |
+|---|---|---|
+| Stima della domanda adattiva: crescita che accelera con i sold-out consecutivi (1,2 → 1,44 → 1,73…), bonus se anche i concorrenti alzano i prezzi, calo rapido quando restano scorte | `demand_estimator="adaptive"` | **Il miglioramento più grande da solo** |
+| Previsione del prezzo d'asta con trend (Holt) | `price_forecast="holt"` | Da sola **peggiora**: si offre "giusto" e si perdono troppe aste |
+| Offerta = previsione + 20% del margine tra previsione e valore massimo | `bid_rule="surplus_share"` | Insieme a Holt **migliora**: più vale il materiale per noi, più conviene non perdere l'asta |
+| Tetto: mai più del 20% sopra l'ultimo prezzo d'aggiudicazione | `bid_cap_over_last=0.20` | Limita lo "sforamento" del trend quando il prezzo cambia direzione |
+| Premio che reagisce subito all'ultimo turno | `premium_mode="fast"` | **Peggiora**: lasciato a `"ema"` |
+
+### Attenzione
+
+- **Più aggressivi alle aste vuol dire prezzi delle materie prime più alti per tutti**, noi compresi. Nella partita d'esempio (seed 4) v2 batte l'undercutter in modo netto (9,5k contro 6,4k), ma guadagna meno di v1 (10,6k). Se il punteggio è il **profitto assoluto** e non la classifica, riducete `bid_surplus_share` e confrontate di nuovo.
+- I valori sono tarati sul simulatore di prova. Domani vanno ritarati su quello vero.

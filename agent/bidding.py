@@ -48,11 +48,21 @@ def plan_bids(obs: Observation, mem: Memory, cfg: dict, prices: Dict[str, float]
         if need[m] <= 0 or values[m] <= 0:
             continue
         ceiling = values[m] * cfg["bid_fraction"]          # MAI oltre questo
-        ema = mem.ema_clear[m].value
-        if ema is None:
+        forecast = mem.clearing_forecast(m)      # prezzo d'aggiudicazione previsto per questo turno
+        if forecast is None:
             price = ceiling * cfg["first_bid_fraction"]
+        elif cfg["bid_rule"] == "surplus_share" and ceiling > forecast:
+            # offri sopra il prezzo previsto una QUOTA del margine che c'è tra previsione e valore:
+            # più vale per noi la materia prima, più conviene non perdere l'asta
+            price = forecast + cfg["bid_surplus_share"] * (ceiling - forecast)
+            price = min(ceiling, price * (1 + mem.premium[m]))
         else:
-            price = min(ceiling, ema * (1 + mem.premium[m]))
+            price = min(ceiling, forecast * (1 + mem.premium[m]))
+        # tetto rispetto all'ULTIMO prezzo osservato: quando il prezzo cambia direzione il trend
+        # "sfora" per qualche turno, e in un'asta pay-as-bid ogni euro sopra il necessario è perso
+        last_cp = obs.last_clearing_price.get(m)
+        if cfg["bid_cap_over_last"] is not None and last_cp:
+            price = min(price, last_cp * (1 + cfg["bid_cap_over_last"]))
         if price <= 0:
             continue
         low_qty = int(math.floor(need[m] * cfg["tier_low_share"]))
