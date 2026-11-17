@@ -27,8 +27,8 @@ from sim.random_markets import describe, random_market
 
 
 def _one(args):
-    seed, cfg = args
-    mc = random_market(seed)
+    seed, cfg, turns = args
+    mc = random_market(seed, turns)
     agents = [SmartAgent("team", cfg)] + league(seed, 1, 9)
     m = Market(agents, mc, seed=seed)
     sc = m.run()
@@ -50,13 +50,15 @@ def main():
     ap.add_argument("--set", action="append", default=[])
     ap.add_argument("--out", default="results/random.csv")
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--turns", default=None, help='durate tra cui scegliere, es. "5,8,10,12" (partite corte)')
     args = ap.parse_args()
     overrides = {k: parse_value(v) for k, v in (kv.split("=", 1) for kv in args.set)}
     cfg = make_config(overrides, profile=args.profile)
 
     t0 = time.time()
     with ProcessPoolExecutor() as ex:
-        rows = list(ex.map(_one, [(args.seed0 + i, cfg) for i in range(args.n)], chunksize=8))
+        turns = [int(x) for x in args.turns.split(",")] if args.turns else None
+        rows = list(ex.map(_one, [(args.seed0 + i, cfg, turns) for i in range(args.n)], chunksize=8))
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))

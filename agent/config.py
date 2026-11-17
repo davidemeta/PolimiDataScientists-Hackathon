@@ -9,7 +9,7 @@ DEFAULT_CONFIG = dict(
     default_material_price=None,   # prezzo delle materie prime prima di avere dati; None = stimato dalla scala (lavorazione/cassa)
 
     # --- prezzi ---
-    margin_init=0.40,              # markup iniziale sul costo di rimpiazzo
+    margin_init=0.60,              # markup iniziale sul costo di rimpiazzo (v6: 0.4 → 0.6, meno perdite all'avvio)
     margin_min=0.15,               # markup minimo (fuori dal finale): mai svendere durante la partita
     margin_max=2.0,
     margin_step=0.05,              # di quanto si muove il markup per turno
@@ -23,7 +23,7 @@ DEFAULT_CONFIG = dict(
     demand_model_weight=0.5,       # peso del prezzo "ottimo da modello" vs regola del markup
     explore_turns=4,               # turni iniziali in cui variamo il prezzo per imparare la domanda
     explore_spread=0.08,
-    liquidation_turns=2,           # ultimi N turni: svendi le scorte (se valgono 0 a fine partita)
+    liquidation_turns=1,           # svendi le scorte solo nell'ultimo turno (v6: 2 → 1)
     liquidation_discount=0.15,
     stale_clearance=True,          # scorte che non si vendono da `stale_turns` turni → smaltimento sotto il prezzo più basso
     stale_turns=2,
@@ -31,7 +31,7 @@ DEFAULT_CONFIG = dict(
     stale_undercut=0.02,           # smaltimento: 2% sotto il concorrente più economico
 
     # --- produzione ---
-    target_stock_turns=1.5,        # produci per coprire 1.5 turni di vendite attese
+    target_stock_turns=1.25,       # produci per coprire 1.25 turni di vendite attese (v6: 1.5 → 1.25)
     initial_sales_share=0.5,       # al turno 0: vendite attese = capacità/n_prodotti * share
     demand_estimator="adaptive",   # "adaptive" (crescita che accelera) | "ema" (vecchio: vendite*stockout_boost)
     stockout_boost=1.5,            # solo per demand_estimator="ema"
@@ -43,13 +43,13 @@ DEFAULT_CONFIG = dict(
 
     # --- aste ---
     bid_fraction=0.90,             # mai offrire più del 90% del valore marginale
-    first_bid_fraction=0.75,       # turno 0 (nessuna info): offri 75% del tetto
+    first_bid_fraction=0.55,       # turno 0 (nessuna info): offri 55% del tetto (v6: 0.75 → 0.55, meno strapagato)
     price_forecast="holt",         # "holt" (livello + trend) | "ema" (vecchio: media semplice, in ritardo)
     holt_alpha=0.5,                # peso del dato nuovo sul livello
     holt_beta=0.3,                 # peso del cambiamento nuovo sul trend
     holt_phi=0.9,                  # smorzamento del trend (1 = nessuno)
     bid_rule="surplus_share",      # "premium": previsione*(1+premium) | "surplus_share": previsione + quota*(tetto - previsione)
-    bid_surplus_share=0.3,         # solo surplus_share: quota del margine (tetto - previsione) aggiunta all'offerta
+    bid_surplus_share=0.15,        # quota del margine (tetto - previsione) aggiunta all'offerta (v6: 0.3 → 0.15)
     bid_cap_over_last=0.20,        # mai offrire più del 20% sopra l'ultimo prezzo d'aggiudicazione (None = nessun tetto)
     infer_clearing=True,           # prezzo d'aggiudicazione nascosto: deducilo da offerte e vincite
     probe_down=0.08,               # ...se vinco tutto, stimo il prezzo 8% sotto la mia offerta più bassa
@@ -173,7 +173,7 @@ STABLE_CONFIG = dict(  # versione v1 (prima di Holt e domanda adattiva), congela
 PROFILES = {
     "balanced": {},                                    # non si sa niente (= DEFAULT_CONFIG, v4)
     "rank": dict(anti_escalation=False),               # punteggio = classifica: non mollare le aste agli altri
-    "profit": dict(bid_surplus_share=0.15),            # punteggio = profitto assoluto: compra meno caro
+    "profit": dict(bid_surplus_share=0.08),            # punteggio = profitto assoluto: compra ancora meno caro
     # aste dove NON si paga la propria offerta (uniform / second_price): offrire vicino al valore costa poco
     "single_price": dict(bid_surplus_share=1.0, bid_surplus_share_uniform=1.0, bid_cap_over_last=None,
                          anti_escalation=False),

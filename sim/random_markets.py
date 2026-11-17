@@ -15,7 +15,8 @@ from typing import Dict
 from sim.market import MarketConfig
 
 
-def random_market(seed: int) -> MarketConfig:
+def random_market(seed: int, turns=None) -> MarketConfig:
+    """`turns`: lista di durate tra cui scegliere (es. [5, 8, 10, 12] per partite corte)."""
     r = random.Random(seed)
     scale = 10 ** r.uniform(-1, 2)                       # prezzi da ×0.1 a ×100 rispetto al mercato base
     n_mat = r.randint(1, 5)
@@ -45,7 +46,7 @@ def random_market(seed: int) -> MarketConfig:
     capacity = r.randint(15, 120)
 
     return MarketConfig(
-        n_turns=r.choice([8, 12, 20, 30, 30, 40, 60, 100]),
+        n_turns=r.choice(turns or [8, 12, 20, 30, 30, 40, 60, 100]),
         start_cash=5000.0 * scale * r.uniform(0.3, 2.0),
         materials=materials, products=products, recipes=recipes, labor_cost=labor, capacity=capacity,
         holding_cost=cost_ref[products[0]] * r.uniform(0.0, 0.15),

@@ -17,6 +17,7 @@ python3 run_tournament.py --sweep "bid_surplus_share=0.1,0.2,0.3,0.5" --scenario
 python3 run_matrix.py --quick --scenario base    # quale profilo conviene? (meno di 1 secondo)
 python3 run_matrix.py --seeds fresh              # matrice completa 28 scenari × 5 profili (circa 15 secondi)
 python3 run_random.py --n 600 --seed0 5000       # 600 mercati CASUALI (tutto varia, scala dei prezzi compresa)
+python3 run_random.py --n 2000 --turns 5,6,8,10,12,15   # solo partite corte
 ```
 
 ## Struttura
@@ -68,7 +69,7 @@ run_game.py, run_tournament.py, run_matrix.py, tests/, playbook.md
 
 ## Risultati attuali (simulatore di prova)
 
-La versione di default è la **v4** (profilo `balanced`). Rispetto alla v3 aggiunge un pavimento ai prezzi: `margin_min=0.15` e mai più del 5% sotto la media dei concorrenti. Il miglioramento è piccolo. Su 23 scenari pay-as-bid, con seed mai usati per decidere (5000+) e avversari mixed, league e tough, il rank passa da 1,112 a 1,096 e il profitto da 15,6k a 16,1k.
+La versione di default è la **v6** (profilo `balanced`). La v4 aveva introdotto il pavimento ai prezzi. Rispetto alla v3 aggiunge un pavimento ai prezzi: `margin_min=0.15` e mai più del 5% sotto la media dei concorrenti. Il miglioramento è piccolo. Su 23 scenari pay-as-bid, con seed mai usati per decidere (5000+) e avversari mixed, league e tough, il rank passa da 1,112 a 1,096 e il profitto da 15,6k a 16,1k.
 
 Lineup sullo scenario `base`, 20 partite:
 
@@ -91,7 +92,11 @@ Lineup sullo scenario `base`, 20 partite:
 
 Il dettaglio per scenario e profilo è in [playbook.md](playbook.md).
 
-**Mercati casuali** (`run_random.py`, 600 mercati con seed 5000+, avversari casuali da 1 a 9): **1° nell'81%**, percentile di rank 0,065, in perdita in 2 mercati su 600, zero errori. Dettagli e correzioni v5 nel playbook §6.
+**Mercati casuali** (`run_random.py`, avversari casuali da 1 a 9), v6 su blocchi di seed mai usati per tarare:
+- tutte le durate: **1° nell'86%**, percentile di rank 0,043-0,047, in perdita in 2-3 mercati su 1.000;
+- partite corte (5-15 turni): **1° nel 76-78%**, contro il 68% della v5.
+
+Dettagli nel playbook §6.
 
 ### Storia delle versioni (ogni modifica ha un flag in config.py)
 
@@ -105,6 +110,7 @@ Il dettaglio per scenario e profilo è in [playbook.md](playbook.md).
 | v4 | Tipo d'asta noto → regola d'offerta automatica; offerta annunciata → offerte più o meno aggressive | `auto_auction_rule`, `supply_sensitivity` |
 | v4 | Pavimento ai prezzi: niente guerre di prezzo | `margin_min=0.15`, `market_band_low=0.05` |
 | v5 | Robustezza a mercati sconosciuti: scala dei prezzi stimata, offerte a kit completi, budget prudente senza dati, smaltimento delle scorte ferme, ricerca del prezzo che accelera | `default_material_price=None`, `kit_budget`, `blind_budget_share`, `stale_clearance`, `probe_accel` |
+| v6 | Partite corte: avvio meno costoso (margine iniziale 0,6, prima offerta 0,55, svendita solo all'ultimo turno, scorte 1,25, quota d'offerta 0,15) | `margin_init`, `first_bid_fraction`, `liquidation_turns`, `target_stock_turns`, `bid_surplus_share` |
 
 **Avversari che cambiano strategia o sbagliano a caso** (lineup `chaos`: 2 switcher e 3 trembler): 20 vittorie su 20 su `base`, rank 1,05-1,08 sui 28 scenari. Statistiche robuste e rilevamento dei cambi (CUSUM) sono disponibili come flag ma **non migliorano**, quindi restano spenti (dettagli nel playbook §5).
 

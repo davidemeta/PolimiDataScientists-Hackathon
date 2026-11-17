@@ -15,17 +15,16 @@ Scopo: trasformare le risposte del briefing (14:30-14:45) in **un profilo dell'a
    ├─ si paga la PROPRIA offerta (pay-as-bid / primo prezzo) ...... balanced  → vai al punto 2
    ├─ secondo prezzo
    │    ├─ e l'avete scritto in auction_type ...................... balanced  (offre già il valore da solo)
-   │    └─ non si sa con certezza / non impostato ................. single_price  (rank da 1,43 a 1,08)
-   └─ prezzo unico (uniform)
-        ├─ punteggio = profitto ................................... single_price  (circa +1k di profitto, stesso rank)
-        └─ punteggio = classifica ................................. balanced
+   │    └─ non si sa con certezza / non impostato ................. single_price  (rank da 1,60 a 1,05)
+   └─ prezzo unico (uniform) ...................................... single_price  (da +1,5k a +2,8k di profitto,
+                                                                                    rank uguale o migliore)
    (con uniform o second_price il punto 2 non si applica)
 
 2. COSTI E DURATA (solo con aste pay-as-bid)
-   ├─ magazzino caro (costo di stoccaggio alto) ..................... glut   (rank da 1,20 a 1,08)
-   ├─ partita corta (≤ 15 turni) .................................... glut   (rank da 1,87 a 1,55)
+   ├─ magazzino caro (costo di stoccaggio alto) ..................... glut   (rank da 1,17 a 1,03)
+   ├─ partita corta (≤ 15 turni) .................................... glut   (rank da 1,28-1,43 a 1,13-1,18)
    └─ tutto il resto ................................................ balanced
-        (glut è in media appena meglio: rank 1,06 contro 1,10, +0,5k di profitto.
+        (glut è in media appena meglio: rank 1,06 contro 1,08, +0,6k di profitto.
          Provatelo con il comando rapido del §3 sullo scenario vero)
 
 3. TEMPI (se diversi da "compro, produco e vendo nello stesso turno")
@@ -66,22 +65,24 @@ Un profilo diverso da `balanced` è consigliato solo se migliora su `tune` **e**
 
 | Scenario | Profilo | Rank fresh (balanced) | Profitto fresh (balanced) |
 |---|---|---|---|
-| `second_price` (tipo d'asta **non** indicato all'agente) | **single_price** | 1,08 (1,43) | 18,5k (13,4k) |
-| `known_second_price` (tipo d'asta indicato) | balanced | 1,13 | 18,6k (la regola automatica offre già il valore) |
-| `uniform` / `known_uniform` | **single_price** se il punteggio è il profitto | 1,15 (1,08-1,17) | 14,3k (13,1-13,6k) |
-| `costly_storage` | **glut** | 1,08 (1,20) | 14,8k (14,3k) |
-| `short` (10 turni) | **glut** | 1,55 (1,87) | 5,8k (5,5k) |
-| tutti gli altri 22 scenari | **balanced** | 1,00-1,17 | — |
+| `second_price` (tipo d'asta **non** indicato all'agente) | **single_price** | 1,05 (1,60) | 21,0k (13,5k) |
+| `known_second_price` (tipo d'asta indicato) | balanced | 1,05 | 21,3k (la regola automatica offre già il valore) |
+| `uniform` / `known_uniform` | **single_price** | 1,07 (1,15-1,22) | 16,5k (13,7-13,9k) |
+| `costly_storage` | **glut** | 1,03 (1,17) | 15,2k (14,5k) |
+| `short` (10 turni) | **glut** | 1,18 (1,28) | 6,4k (6,0k) |
+| tutti gli altri scenari | **balanced** (glut di poco meglio) | 1,00-1,15 | — |
+
+I numeri sono della v6, sui seed `fresh`. Le cinque righe con un profilo diverso da balanced sono confermate anche su `tune` e `holdout`.
 
 Media su `fresh` degli scenari pay-as-bid:
 
 | Profilo | Rank | Profitto |
 |---|---|---|
-| balanced | 1,096 | 16,1k |
-| rank | 1,078 | 16,2k |
-| profit | 1,069 | 16,2k |
-| glut | 1,064 | 16,7k |
-| single_price | 4,08 | 3,0k |
+| balanced | 1,078 | 16,2k |
+| rank | 1,073 | 16,3k |
+| profit | 1,095 | 15,9k |
+| glut | 1,059 | 16,8k |
+| single_price | 4,42 | 2,0k |
 
 **Il profilo `single_price` va usato SOLO con aste uniform o second_price.** Con aste pay-as-bid è disastroso: rank circa 4, profitto circa 3k, perché paga ogni unità al proprio valore.
 
@@ -209,6 +210,32 @@ Restano un po' più deboli, pur restando quasi sempre primi:
 - i mercati con un solo prodotto, circa 0,10.
 
 ---
+
+### Partite corte (v6)
+
+Ho fatto 2.000 simulazioni di partite da 5 a 15 turni su mercati casuali. È emerso che **i primi 2 turni sono in perdita**: −8% e −2% della cassa iniziale, perché l'agente compra alla cieca e strapaga. In una partita da 5 turni questo costo d'avvio pesa tantissimo. Inoltre le sconfitte sono di misura: in mediana facciamo il 91% del vincitore.
+
+Ho fatto uno sweep di 9 parametri e poi di 10 combinazioni, misurando su un blocco di taratura, uno di verifica e uno di mercati di ogni durata. Sono cambiati cinque default:
+
+| Parametro | Prima | v6 | Perché |
+|---|---|---|---|
+| `margin_init` | 0,40 | **0,60** | si parte con un prezzo più alto, quindi meno perdite nei primi turni |
+| `first_bid_fraction` | 0,75 | **0,55** | al turno 0 si strapaga meno quando i prezzi non si conoscono |
+| `liquidation_turns` | 2 | **1** | si svende solo all'ultimo turno, non per due turni |
+| `target_stock_turns` | 1,5 | **1,25** | meno scorte, quindi meno rischio di invenduto |
+| `bid_surplus_share` | 0,30 | **0,15** | offerte un po' meno aggressive |
+
+Risultati su blocchi di seed **mai usati per tarare**:
+
+| Misura | v5 | v6 |
+|---|---|---|
+| Partite corte: 1° posto | 68% | **76-78%** |
+| Partite corte: percentile di rank | 0,123 | **0,074-0,084** |
+| Tutte le durate: 1° posto | 81% | **86%** |
+| Tutte le durate: percentile di rank | 0,065 | **0,043-0,047** |
+| Scenari noti (pay-as-bid, fresh): rank | 1,113 | **1,072** (profitto +0,4k; scenario peggiore da 2,05 a 1,27) |
+
+Con la partita corta il profilo `glut` dà ancora un piccolo vantaggio (vedi §1).
 
 ## 7. Limiti da tenere a mente
 
