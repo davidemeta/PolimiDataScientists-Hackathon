@@ -16,7 +16,9 @@ from typing import Callable, Dict, List
 from agent.config import STABLE_CONFIG, make_config
 from agent.core import SmartAgent
 from sim.market import Market, MarketConfig
-from sim.opponents import FixedAgent, HighPricer, Overbidder, RandomAgent, Undercutter
+from agent.config import DEFAULT_CONFIG
+from sim.opponents import (Colluder, Copycat, Dumper, FixedAgent, HighPricer, Hoarder, Overbidder,
+                           RandomAgent, Undercutter, league)
 
 OURS = "team"
 
@@ -30,6 +32,11 @@ LINEUPS: Dict[str, Callable] = {
                                FixedAgent()],
     "mirror": lambda cfg, s: [SmartAgent(OURS, cfg)] + [SmartAgent(f"stable{k}", STABLE_CONFIG) for k in range(4)],
     "duel": lambda cfg, s: [SmartAgent(OURS, cfg), SmartAgent("stable", STABLE_CONFIG)],
+    # gara "vera": avversari estratti a caso dalla libreria (3-7), diversi a ogni partita
+    "league": lambda cfg, s: [SmartAgent(OURS, cfg)] + league(s),
+    # squadre che sanno fare il loro mestiere: copie della versione attuale + strategie "intelligenti"
+    "self": lambda cfg, s: [SmartAgent(OURS, cfg)] + [SmartAgent(f"cur{k}", DEFAULT_CONFIG) for k in range(3)],
+    "tough": lambda cfg, s: [SmartAgent(OURS, cfg), Hoarder(), Dumper(), Colluder(), Copycat()],
 }
 
 
