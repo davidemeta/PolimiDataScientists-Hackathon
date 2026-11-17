@@ -122,6 +122,22 @@ def test_all_scenarios_all_profiles():
             assert m.max_time[0] < 0.1, f"{name}/{prof}: troppo lento"
 
 
+def test_random_markets():
+    """80 mercati casuali (materie prime, prodotti, scala dei prezzi, regole): mai eccezioni né azioni invalide."""
+    from agent.config import PROFILES, make_config
+    from sim.opponents import league
+    from sim.random_markets import random_market
+    profiles = list(PROFILES)
+    for seed in range(80):
+        prof = profiles[seed % len(profiles)]
+        ours = SmartAgent("team", make_config(profile=prof), debug=True)
+        m = Market([ours] + league(seed, 1, 9), random_market(seed), seed=seed)
+        m.run()
+        assert m.errors[0] == 0, f"mercato {seed}/{prof}: eccezioni"
+        assert m.invalid[0] == 0, f"mercato {seed}/{prof}: {m.invalid[0]} azioni invalide"
+        assert m.max_time[0] < 0.1, f"mercato {seed}/{prof}: troppo lento"
+
+
 def test_fuzz_observations():
     """Osservazioni casuali e anche assurde: l'azione deve restare valida."""
     rng = random.Random(42)

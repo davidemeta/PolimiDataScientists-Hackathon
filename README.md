@@ -9,13 +9,14 @@ Questo è lo scheletro dell'agente, pronto da collegare all'API vera degli organ
 ## Comandi
 
 ```bash
-python3 tests/test_robustness.py                 # 17 test, tutti gli scenari × profili: mai crash né azioni invalide
+python3 tests/test_robustness.py                 # 18 test (scenari × profili, 80 mercati casuali): mai crash né azioni invalide
 python3 run_game.py --seed 3                     # una partita, log in logs/team.csv
 python3 run_tournament.py                        # torneo contro 8 gruppi di avversari
 python3 run_tournament.py --lineup league --scenario uniform --profile single_price
 python3 run_tournament.py --sweep "bid_surplus_share=0.1,0.2,0.3,0.5" --scenario real
 python3 run_matrix.py --quick --scenario base    # quale profilo conviene? (meno di 1 secondo)
 python3 run_matrix.py --seeds fresh              # matrice completa 28 scenari × 5 profili (circa 15 secondi)
+python3 run_random.py --n 600 --seed0 5000       # 600 mercati CASUALI (tutto varia, scala dei prezzi compresa)
 ```
 
 ## Struttura
@@ -35,6 +36,7 @@ agent/                  ← IL NOSTRO AGENTE (quello che si consegna)
 sim/                    ← SOLO PER I TEST LOCALI
   market.py             simulatore di prova: aste pay-as-bid/uniform/second_price, domanda logit/linear/cheapest_first,
                         tempi della filiera, informazioni nascoste, costi
+  random_markets.py     generatore di mercati casuali (1-5 materie prime, 1-4 prodotti, prezzi ×0,1-×100, …)
   scenarios.py          catalogo di 28 varianti di mercato (+ dove aggiungere lo scenario "real" domani)
   opponents.py          14 tipi di avversario (compresi Switcher e Trembler) + lineup casuale "league"
 adapter.py              ← DA COMPLETARE DOMANI: traduce l'API vera ↔ Observation/Action, sceglie il PROFILE
@@ -89,6 +91,8 @@ Lineup sullo scenario `base`, 20 partite:
 
 Il dettaglio per scenario e profilo è in [playbook.md](playbook.md).
 
+**Mercati casuali** (`run_random.py`, 600 mercati con seed 5000+, avversari casuali da 1 a 9): **1° nell'81%**, percentile di rank 0,065, in perdita in 2 mercati su 600, zero errori. Dettagli e correzioni v5 nel playbook §6.
+
 ### Storia delle versioni (ogni modifica ha un flag in config.py)
 
 | Versione | Modifica | Flag |
@@ -100,6 +104,7 @@ Il dettaglio per scenario e profilo è in [playbook.md](playbook.md).
 | v4 | Ritardo della filiera: acquisti, produzione e finale coerenti con `sell_same_turn` / `production_after_auction` | automatico |
 | v4 | Tipo d'asta noto → regola d'offerta automatica; offerta annunciata → offerte più o meno aggressive | `auto_auction_rule`, `supply_sensitivity` |
 | v4 | Pavimento ai prezzi: niente guerre di prezzo | `margin_min=0.15`, `market_band_low=0.05` |
+| v5 | Robustezza a mercati sconosciuti: scala dei prezzi stimata, offerte a kit completi, budget prudente senza dati, smaltimento delle scorte ferme, ricerca del prezzo che accelera | `default_material_price=None`, `kit_budget`, `blind_budget_share`, `stale_clearance`, `probe_accel` |
 
 **Avversari che cambiano strategia o sbagliano a caso** (lineup `chaos`: 2 switcher e 3 trembler): 20 vittorie su 20 su `base`, rank 1,05-1,08 sui 28 scenari. Statistiche robuste e rilevamento dei cambi (CUSUM) sono disponibili come flag ma **non migliorano**, quindi restano spenti (dettagli nel playbook §5).
 

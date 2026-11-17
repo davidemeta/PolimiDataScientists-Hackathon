@@ -31,6 +31,8 @@ class Memory:
         self.premium: Dict[str, float] = {m: cfg["bid_premium"] for m in info.materials}
         self.clear_hist: Dict[str, List[float]] = {m: [] for m in info.materials}
         self.supply_hist: Dict[str, List[int]] = {m: [] for m in info.materials}
+        self.probe_streak: Dict[str, int] = {m: 0 for m in info.materials}   # >0 vinto tutto, <0 perso tutto
+        self.start_cash = obs.cash
         # rilevamento di cambi improvvisi (CUSUM) sul prezzo d'aggiudicazione e sui prezzi dei concorrenti
         self.cusum_clear: Dict[str, List[float]] = {m: [0.0, 0.0] for m in info.materials}
         self.cusum_comp: Dict[str, List[float]] = {p: [0.0, 0.0] for p in info.products}
@@ -46,9 +48,12 @@ class Memory:
         self.stockout_streak: Dict[str, int] = {p: 0 for p in info.products}
         self.last_boost: Dict[str, float] = {p: 1.0 for p in info.products}
         self.margin: Dict[str, float] = {p: cfg["margin_init"] for p in info.products}
+        self.stale: Dict[str, int] = {p: 0 for p in info.products}           # turni di fila con scorte che non si vendono
+        self.min_comp: Dict[str, Optional[float]] = {p: None for p in info.products}
         # prezzo "confermato dal mercato": media dei nostri prezzi nei turni in cui abbiamo venduto quasi tutto
         self.confirmed_price: Dict[str, EMA] = {p: EMA(a) for p in info.products}
         self.demand_points: Dict[str, List[Tuple[float, float]]] = {p: [] for p in info.products}
+        self._labor = list(info.labor_cost.values())
         self.ready = True
 
     # ------------------------------------------------------------------
@@ -151,11 +156,17 @@ class Memory:
         paid = obs.last_paid.get(m, 0.0)
         lo, hi = bids[-1].price, bids[0].price
         if won > 0 and paid / won < lo - 1e-6:
+            self.probe_streak[m] = 0
             return paid / won
         if won >= req:
-            return lo * (1 - cfg["probe_down"])
+            self.probe_streak[m] = max(1, self.probe_streak[m] + 1)
+            step = cfg["probe_down"] * (2 ** (self.probe_streak[m] - 1) if cfg["probe_accel"] else 1)
+            return lo * max(0.3, 1 - min(step, 0.7))
         if won == 0:
-            return hi * (1 + cfg["probe_up"])
+            self.probe_streak[m] = min(-1, self.probe_streak[m] - 1)
+            step = cfg["probe_up"] * (2 ** (-self.probe_streak[m] - 1) if cfg["probe_accel"] else 1)
+            return hi * (1 + min(step, 2.0))
+        self.probe_streak[m] = 0
         filled = 0
         for b in bids:
             filled += b.qty
@@ -169,6 +180,7 @@ class Memory:
         # mediana: un singolo prezzo assurdo (agente "scarso") non sposta la stima
         comp = (statistics.median(comp_list) if comp_list else None) if cfg["comp_stat"] == "median" else mean(comp_list)
         comp_rising = False
+        self.min_comp[p] = min(comp_list) if comp_list else None
         if comp is not None:
             prev = self.prev_comp[p]
             comp_rising = prev is not None and comp > prev * (1 + cfg["comp_rise_threshold"])
@@ -195,6 +207,7 @@ class Memory:
             self.ema_sales[p].update(sold * (cfg["stockout_boost"] if left == 0 else 1.0))
 
         sellthrough = sold / offered
+        self.stale[p] = self.stale[p] + 1 if (left > 0 and sellthrough < cfg["stale_sellthrough"]) else 0
         if sellthrough >= cfg["sellthrough_high"]:
             self.confirmed_price[p].update(my_price)
             self.margin[p] += cfg["margin_step"]
@@ -268,7 +281,20 @@ class Memory:
 
     def material_price(self, m: str) -> float:
         v = self.clearing_forecast(m)
-        return self.cfg["default_material_price"] if v is None else v
+        return self.default_material_price() if v is None else v
+
+    def default_material_price(self) -> float:
+        """
+        Prima di avere dati d'asta non sappiamo la SCALA dei prezzi (0.5 € o 500 €?).
+        Indizio: il costo di lavorazione (nel mercato base materia ≈ 0.77 × lavorazione media),
+        altrimenti la cassa iniziale (base: 5000 € ↔ 5 €). Si corregge da sola dal primo turno d'asta.
+        """
+        if self.cfg["default_material_price"] is not None:
+            return self.cfg["default_material_price"]
+        labor = [v for v in self._labor if v > 0]
+        if labor:
+            return 5.0 / 6.5 * sum(labor) / len(labor)
+        return max(self.start_cash, 1.0) / 1000.0
 
     def unit_cost(self, obs: Observation, p: str) -> float:
         """Costo di RIMPIAZZO di un'unità: materie prime ai prezzi correnti + lavorazione."""

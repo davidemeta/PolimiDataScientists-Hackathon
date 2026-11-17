@@ -36,12 +36,23 @@ def _price_for(obs: Observation, mem: Memory, cfg: dict, p: str) -> float:
         price = min(max(price, mkt * (1 - cfg["market_band_low"])), mkt * (1 + cfg["market_band_high"]))
 
     # 4) esplorazione nei primi turni (per imparare la curva di domanda)
-    if obs.turn < cfg["explore_turns"]:
+    explore = min(cfg["explore_turns"], obs.info.n_turns // max(1, cfg["explore_turns_ratio"]))
+    if obs.turn < explore:
         pattern = (0.0, 1.0, -1.0, 0.5, -0.5)
         price *= 1 + cfg["explore_spread"] * pattern[obs.turn % len(pattern)]
 
     # 5) pavimento: mai sotto il costo (+ markup minimo) fuori dal finale
     floor = cost * (1 + cfg["margin_min"])
+
+    # 5b) scorte "ferme": non si vendono da N turni. Sono già pagate (costo affondato) e il magazzino costa:
+    #     scendiamo sotto il concorrente più economico finché non ripartono le vendite
+    stock_now = obs.product_inventory.get(p, 0)
+    if cfg["stale_clearance"] and stock_now > 0 and mem.stale[p] >= cfg["stale_turns"]:
+        k = mem.stale[p] - cfg["stale_turns"] + 1
+        cheapest = mem.min_comp[p]
+        target = cheapest * (1 - cfg["stale_undercut"]) if cheapest else price * (1 - cfg["liquidation_discount"]) ** k
+        price = min(price, target)
+        floor = max(obs.info.salvage_value, 0.0) + 0.01
 
     # 6) finale: le scorte a fine partita valgono salvage → svendi (i costi passati sono sunk)
     stock = obs.product_inventory.get(p, 0)

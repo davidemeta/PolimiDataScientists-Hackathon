@@ -94,7 +94,30 @@ def plan_bids(obs: Observation, mem: Memory, cfg: dict, prices: Dict[str, float]
         bids.append(Bid(m, round(price, 2), high_qty))
         if low_qty > 0:
             bids.append(Bid(m, round(price * (1 - cfg["tier_discount"]), 2), low_qty))
-    return bids
+    return _fit_budget(bids, obs, mem, cfg, production)
+
+
+def _fit_budget(bids: List[Bid], obs: Observation, mem: Memory, cfg: dict, production: Dict[str, int]) -> List[Bid]:
+    """
+    Le materie prime sono COMPLEMENTARI: vincere A senza B non serve a niente.
+    Se la cassa non basta per tutte le offerte, riduciamo TUTTE le quantità nella stessa proporzione
+    (kit completi), invece di lasciare che la validazione tagli le offerte più care e ci lasci
+    con materiali spaiati. Finché non conosciamo i prezzi (nessun dato d'asta) spendiamo al massimo
+    una quota della cassa: la scala dei prezzi potrebbe essere molto diversa da quella stimata.
+    """
+    if not bids or not cfg["kit_budget"]:
+        return bids
+    info = obs.info
+    labor = sum(info.labor_cost.get(p, 0.0) * q for p, q in production.items())
+    budget = max(0.0, obs.cash * (1 - cfg["cash_buffer"]) - labor)
+    if all(mem.clearing_forecast(m) is None for m in info.materials):
+        budget = min(budget, obs.cash * cfg["blind_budget_share"])
+    total = sum(b.price * b.qty for b in bids)
+    if total <= budget or total <= 0:
+        return bids
+    f = budget / total
+    out = [Bid(b.material, b.price, int(b.qty * f)) for b in bids]
+    return [b for b in out if b.qty > 0]
 
 
 def _supply_factor(obs: Observation, mem: Memory, cfg: dict, m: str) -> float:

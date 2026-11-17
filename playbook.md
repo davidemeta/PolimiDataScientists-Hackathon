@@ -168,7 +168,49 @@ Ho provato tre protezioni, tutte disponibili come flag ma spente di default:
 
 **Quando riprovarle domani:** se nel log (`logs/live.csv`) vedete i prezzi dei concorrenti (`comp_*`) saltare in modo assurdo da un turno all'altro e l'agente inseguirli. Confrontate con `run_tournament.py --scenario real --set comp_stat=median`.
 
-## 6. Limiti da tenere a mente
+## 6. Mercati casuali: quando il gioco vero non somiglia a nessuno scenario
+
+`python3 run_random.py` genera mercati in cui **varia tutto insieme**:
+- da 1 a 5 materie prime e da 1 a 4 prodotti, con ricette casuali;
+- capacità e costi di lavorazione;
+- **scala dei prezzi da ×0,1 a ×100**;
+- elasticità e dimensione del mercato, abbondanza di materie prime;
+- da 2 a 10 agenti e da 8 a 100 turni;
+- tipo d'asta, domanda, tempi e informazioni visibili.
+
+Risultato su 600 mercati mai usati per decidere (seed 5000+), con il profilo balanced:
+- **1° nell'81% dei mercati**;
+- percentile di rank medio 0,065 (0 = primo, 1 = ultimo);
+- in perdita solo in 2 mercati su 600;
+- zero errori e zero azioni non valide.
+
+Su un secondo blocco (seed 9000+): 1° nell'86% dei mercati, percentile 0,046.
+
+Cosa hanno fatto emergere, e come l'ho corretto (v5):
+
+| Problema trovato | Correzione | Flag |
+|---|---|---|
+| Costanti tarate su prezzi di 5-60 €: con prezzi ×100 o ×0,1 il primo turno era sballato | Prezzo iniziale dei materiali stimato dalla scala (costo di lavorazione, oppure cassa iniziale) | `default_material_price=None` |
+| Cassa insufficiente → la validazione tagliava le offerte più care → materiali **spaiati**, nessun prodotto fabbricabile | Se la cassa non basta, tutte le offerte si riducono in proporzione (kit completi) | `kit_budget` |
+| Prezzi sconosciuti al turno 0 → si spendeva tutto alla cieca | Senza dati d'asta si spende al massimo il 35% della cassa | `blind_budget_share` |
+| Scorte invendute ferme per 90 turni a un prezzo sopra il mercato, mentre il magazzino costava → bancarotta | Smaltimento: dopo 2 turni senza vendite, prezzo 2% sotto il concorrente più economico (sono costi affondati) | `stale_clearance` |
+| Con il prezzo d'asta nascosto e la scala sbagliata, la stima saliva solo del 10% a turno | Il passo di ricerca raddoppia se si perde (o si vince) tutto per più turni | `probe_accel` |
+
+Effetto, misurato su 600 mercati nuovi:
+- percentile di rank da 0,117 a **0,065**;
+- mercati in perdita da 17 a **2**;
+- 1° posto dal 75% all'**81%**.
+
+**Il costo:** sugli scenari "conosciuti" del catalogo il profitto scende dell'1,4% (rank da 1,106 a 1,109, dentro il rumore). È un'assicurazione: domani il mercato sarà sconosciuto.
+
+Restano un po' più deboli, pur restando quasi sempre primi:
+- le partite molto corte (8-12 turni), con percentile circa 0,13;
+- i mercati con 4 materie prime, circa 0,12;
+- i mercati con un solo prodotto, circa 0,10.
+
+---
+
+## 7. Limiti da tenere a mente
 
 - **Tutto è tarato sul simulatore di prova.** Il valore del playbook è nella *direzione* (quale profilo per quale tipo di gioco e quali parametri toccare), non nei numeri esatti.
 - Le differenze tra profili sotto ~0,08 di rank sono rumore statistico. Per questo il playbook consiglia `balanced` in quei casi.

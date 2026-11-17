@@ -37,6 +37,8 @@ LINEUPS: Dict[str, Callable] = {
     # squadre che sanno fare il loro mestiere: copie della versione attuale + strategie "intelligenti"
     "self": lambda cfg, s: [SmartAgent(OURS, cfg)] + [SmartAgent(f"cur{k}", DEFAULT_CONFIG) for k in range(3)],
     "tough": lambda cfg, s: [SmartAgent(OURS, cfg), Hoarder(), Dumper(), Colluder(), Copycat()],
+    # mercato affollato: 9 avversari estratti dalla libreria
+    "crowded": lambda cfg, s: [SmartAgent(OURS, cfg)] + league(s, 9, 9),
     # avversari che cambiano strategia e agenti "scarsi" che sbagliano a caso
     "chaos": lambda cfg, s: [SmartAgent(OURS, cfg), Switcher("sw1", seed=s), Switcher("sw2", period=5, seed=s + 1),
                              Trembler("tr1", seed=s + 2), Trembler("tr2", inner=BanditPricer(seed=s), eps=0.3, seed=s + 3),

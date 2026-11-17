@@ -72,5 +72,5 @@ class SmartAgent(BaseAgent):
                 try:
                     out[p] = self.mem.unit_cost(obs, p) * 1.3
                 except Exception:
-                    out[p] = 10.0
+                    out[p] = 2.0 * self.mem.default_material_price() if self.mem.ready else 1.0
         return out

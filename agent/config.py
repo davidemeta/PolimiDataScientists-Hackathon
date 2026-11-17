@@ -6,7 +6,7 @@ run_tournament.py --sweep "nome=v1,v2,v3".
 DEFAULT_CONFIG = dict(
     # --- stimatori ---
     ema_alpha=0.3,                 # reattività delle medie mobili (0.2 stabile, 0.5 reattiva)
-    default_material_price=5.0,    # prezzo stimato delle materie prime prima di avere dati
+    default_material_price=None,   # prezzo delle materie prime prima di avere dati; None = stimato dalla scala (lavorazione/cassa)
 
     # --- prezzi ---
     margin_init=0.40,              # markup iniziale sul costo di rimpiazzo
@@ -25,6 +25,10 @@ DEFAULT_CONFIG = dict(
     explore_spread=0.08,
     liquidation_turns=2,           # ultimi N turni: svendi le scorte (se valgono 0 a fine partita)
     liquidation_discount=0.15,
+    stale_clearance=True,          # scorte che non si vendono da `stale_turns` turni → smaltimento sotto il prezzo più basso
+    stale_turns=2,
+    stale_sellthrough=0.2,         # "non si vendono" = venduto meno del 20% di quanto avevamo
+    stale_undercut=0.02,           # smaltimento: 2% sotto il concorrente più economico
 
     # --- produzione ---
     target_stock_turns=1.5,        # produci per coprire 1.5 turni di vendite attese
@@ -50,6 +54,7 @@ DEFAULT_CONFIG = dict(
     infer_clearing=True,           # prezzo d'aggiudicazione nascosto: deducilo da offerte e vincite
     probe_down=0.08,               # ...se vinco tutto, stimo il prezzo 8% sotto la mia offerta più bassa
     probe_up=0.10,                 # ...se non vinco niente, 10% sopra la mia offerta più alta
+    probe_accel=True,              # turni consecutivi tutti vinti/persi → il passo raddoppia (scala sconosciuta)
     auto_auction_rule=True,        # se il tipo d'asta è noto: second_price → offri il valore; uniform → quota più alta
     bid_surplus_share_uniform=0.5, # quota del margine con asta uniform (si paga il prezzo unico, non la propria offerta)
     supply_sensitivity=1.0,        # offerta annunciata: quota del margine * (offerta_media / offerta_attuale)^sens
@@ -77,6 +82,9 @@ DEFAULT_CONFIG = dict(
     tier_discount=0.12,
     endgame_turns=0,               # smetti di comprare quando turns_left < N (0 se si vende nello stesso turno)
     cash_buffer=0.05,              # quota di cassa mai spesa
+    kit_budget=True,               # cassa insufficiente → riduci TUTTE le offerte in proporzione (kit completi)
+    blind_budget_share=0.35,       # senza nessun dato sui prezzi d'asta, spendi al massimo il 35% della cassa
+    explore_turns_ratio=1,         # esplorazione al massimo n_turni/ratio (1 = nessun limite; 7 provato: non migliora)
 )
 
 # Copia "congelata" dell'ultima versione consegnata: usata come avversario nel torneo.
@@ -149,6 +157,13 @@ STABLE_CONFIG = dict(  # versione v1 (prima di Holt e domanda adattiva), congela
     tier_discount=0.12,
     endgame_turns=0,
     cash_buffer=0.05,
+    kit_budget=False,
+    blind_budget_share=1.0,
+    stale_clearance=False,
+    stale_turns=2,
+    stale_sellthrough=0.2,
+    stale_undercut=0.02,
+    explore_turns_ratio=1,
 )
 
 
