@@ -27,6 +27,11 @@ class Memory:
         self.winrate: Dict[str, EMA] = {m: EMA(0.5) for m in info.materials}
         self.last_winrate: Dict[str, Optional[float]] = {m: None for m in info.materials}
         self.premium: Dict[str, float] = {m: cfg["bid_premium"] for m in info.materials}
+        self.clear_hist: Dict[str, List[float]] = {m: [] for m in info.materials}
+        # rincorsa: magazzino che cresce / vendite che non tengono il passo
+        self.prev_total_stock: Optional[int] = None
+        self.stock_growing = False
+        self.last_sellthrough: Optional[float] = None
         # vendite e concorrenti
         self.ema_comp: Dict[str, EMA] = {p: EMA(a) for p in info.products}
         self.prev_comp: Dict[str, Optional[float]] = {p: None for p in info.products}
@@ -34,6 +39,8 @@ class Memory:
         self.stockout_streak: Dict[str, int] = {p: 0 for p in info.products}
         self.last_boost: Dict[str, float] = {p: 1.0 for p in info.products}
         self.margin: Dict[str, float] = {p: cfg["margin_init"] for p in info.products}
+        # prezzo "confermato dal mercato": media dei nostri prezzi nei turni in cui abbiamo venduto quasi tutto
+        self.confirmed_price: Dict[str, EMA] = {p: EMA(a) for p in info.products}
         self.demand_points: Dict[str, List[Tuple[float, float]]] = {p: [] for p in info.products}
         self.ready = True
 
@@ -48,6 +55,11 @@ class Memory:
         self._update_auctions(obs, last)
         for p in info.products:
             self._update_product(obs, last, p)
+        total_stock = sum(obs.product_inventory.get(p, 0) for p in info.products)
+        sold = sum(obs.last_sales.get(p, 0) for p in info.products)
+        self.stock_growing = self.prev_total_stock is not None and total_stock > self.prev_total_stock
+        self.prev_total_stock = total_stock
+        self.last_sellthrough = sold / (sold + total_stock) if sold + total_stock > 0 else None
 
     def _update_auctions(self, obs: Observation, last: Action) -> None:
         cfg = self.cfg
@@ -59,6 +71,7 @@ class Memory:
             if cp is not None:
                 self.ema_clear[m].update(cp)
                 self.holt_clear[m].update(cp)
+                self.clear_hist[m].append(cp)
             req = requested.get(m, 0)
             if req <= 0:
                 continue
@@ -103,6 +116,7 @@ class Memory:
 
         sellthrough = sold / offered
         if sellthrough >= cfg["sellthrough_high"]:
+            self.confirmed_price[p].update(my_price)
             self.margin[p] += cfg["margin_step"]
         elif sellthrough < cfg["sellthrough_low"]:
             self.margin[p] -= cfg["margin_step"]
@@ -139,6 +153,33 @@ class Memory:
             est.value = sold if est.value is None else a * sold + (1 - a) * est.value
 
     # ------------------------------------------------------------------
+    def escalating(self, m: str) -> bool:
+        """
+        Rincorsa sui prezzi d'asta: il prezzo d'aggiudicazione di m è salito per N turni di fila
+        E le nostre vendite non tengono il passo (magazzino che cresce o sell-through basso).
+        Se il prezzo sale ma vendiamo tutto, la domanda giustifica la salita: non è una rincorsa.
+        """
+        cfg = self.cfg
+        n = cfg["escalation_turns"]
+        h = self.clear_hist[m]
+        if len(h) < n + 1:
+            return False
+        rising = all(h[-i] > h[-i - 1] * (1 + cfg["escalation_min_rise"]) for i in range(1, n + 1))
+        weak_sales = self.stock_growing or (
+            self.last_sellthrough is not None and self.last_sellthrough < cfg["escalation_sellthrough"])
+        return rising and weak_sales
+
+    def value_price(self, p: str, our_price: float) -> float:
+        """
+        Prezzo di vendita usato per calcolare il VALORE delle materie prime. Con il prezzo
+        'costo + margine' il valore sale insieme al costo dei materiali (circolo vizioso):
+        lo ancoriamo al prezzo a cui il mercato ha davvero comprato tutto.
+        """
+        conf = self.confirmed_price[p].value
+        if self.cfg["value_anchor"] != "confirmed" or conf is None:
+            return our_price
+        return min(our_price, conf * (1 + self.cfg["value_anchor_slack"]))
+
     def clearing_forecast(self, m: str) -> Optional[float]:
         """Previsione del prezzo d'aggiudicazione del PROSSIMO turno (None se nessun dato)."""
         if self.cfg["price_forecast"] == "holt":

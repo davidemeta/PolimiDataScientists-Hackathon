@@ -47,6 +47,13 @@ DEFAULT_CONFIG = dict(
     bid_rule="surplus_share",      # "premium": previsione*(1+premium) | "surplus_share": previsione + quota*(tetto - previsione)
     bid_surplus_share=0.2,         # solo surplus_share: quota del margine (tetto - previsione) aggiunta all'offerta
     bid_cap_over_last=0.20,        # mai offrire più del 20% sopra l'ultimo prezzo d'aggiudicazione (None = nessun tetto)
+    anti_escalation=True,          # smetti di inseguire i prezzi d'asta durante una rincorsa
+    escalation_turns=3,            # rincorsa = prezzo d'aggiudicazione in salita per N turni di fila...
+    escalation_min_rise=0.02,      # ...ognuno di almeno +2%...
+    escalation_sellthrough=0.80,   # ...mentre il magazzino cresce o vendiamo meno dell'80%
+    escalation_backoff=0.0,        # durante la rincorsa offri al massimo ultimo prezzo * (1 - backoff)
+    value_anchor="confirmed",      # "confirmed": valore dei materiali calcolato sul prezzo confermato dal mercato | "own"
+    value_anchor_slack=0.10,       # tolleranza sopra il prezzo confermato
     bid_premium=0.05,              # offerta = prezzo d'aggiudicazione previsto * (1 + premium)
     premium_mode="ema",            # "ema" (media del tasso di vittoria) | "fast" (reagisce all'ultimo turno: nei test perde troppe aste)
     premium_step=0.03,             # salita del premium quando si perde
@@ -96,6 +103,13 @@ STABLE_CONFIG = dict(  # versione v1 (prima di Holt e domanda adattiva), congela
     bid_rule='premium',
     bid_surplus_share=0.3,
     bid_cap_over_last=None,
+    anti_escalation=False,
+    escalation_turns=3,
+    escalation_min_rise=0.02,
+    escalation_sellthrough=0.8,
+    escalation_backoff=0.0,
+    value_anchor='own',
+    value_anchor_slack=0.1,
     first_bid_fraction=0.75,
     price_forecast='ema',
     holt_alpha=0.5,

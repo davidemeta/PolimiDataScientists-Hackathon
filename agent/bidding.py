@@ -23,7 +23,7 @@ def material_values(obs: Observation, mem: Memory, prices: Dict[str, float],
         rec = info.recipes[p]
         for m, need in rec.items():
             others = sum(q * mem.material_price(o) for o, q in rec.items() if o != m)
-            v = (prices[p] - info.labor_cost[p] - others) / need
+            v = (mem.value_price(p, prices[p]) - info.labor_cost[p] - others) / need
             values[m] = max(values[m], v)
     return values
 
@@ -63,6 +63,11 @@ def plan_bids(obs: Observation, mem: Memory, cfg: dict, prices: Dict[str, float]
         last_cp = obs.last_clearing_price.get(m)
         if cfg["bid_cap_over_last"] is not None and last_cp:
             price = min(price, last_cp * (1 + cfg["bid_cap_over_last"]))
+        # anti-rincorsa: se il prezzo sale da N turni e noi non vendiamo tutto, smettiamo di inseguire.
+        # Offriamo al massimo l'ultimo prezzo d'aggiudicazione (niente trend, niente premio):
+        # se l'altro vuole continuare a salire, che bruci la SUA cassa.
+        if cfg["anti_escalation"] and last_cp and mem.escalating(m):
+            price = min(price, last_cp * (1 - cfg["escalation_backoff"]))
         if price <= 0:
             continue
         low_qty = int(math.floor(need[m] * cfg["tier_low_share"]))

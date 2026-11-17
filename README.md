@@ -60,31 +60,36 @@ run_game.py, run_tournament.py, tests/
 - **Non ottimizzate troppo sul simulatore di prova**: è un'approssimazione. Fidatevi di più di un miglioramento che vale su tutti i lineup che di un +20% su uno solo.
 - `SmartAgent(debug=True)` rilancia le eccezioni, e serve in sviluppo. **In submission lasciate `debug=False`.**
 
-## Risultati attuali (simulatore di prova, aste pay-as-bid)
+## Risultati attuali (simulatore di prova)
 
-**v2** (default) contro **v1** (`STABLE_CONFIG`, congelata). Verificato anche su 30 partite con seed mai usati per la taratura (1000-1029):
+La versione di default è la **v3**. Come avversario di confronto c'è la **v1** (`STABLE_CONFIG`, congelata). Tutti i numeri qui sotto vengono da 30 partite con seed mai usati per la taratura (1000-1029).
 
-| Lineup | v1 rank / media / minimo | v2 rank / media / minimo |
+Pay-as-bid, nel formato media / minimo / rank:
+
+| Lineup | v1 | v2 | v3 |
+|---|---|---|---|
+| mixed | 11,1k / 1,2k / 2,57 | 17,2k / 11,4k / 1,00 | 16,5k / 10,2k / 1,00 |
+| aggressive | 18,4k / 8,6k / 1,00 | 14,3k / 9,2k / 1,00 | 12,7k / 7,4k / 1,00 |
+| passive | 26,2k / 22,6k / 1,00 | 33,0k / 28,5k / 1,00 | 34,1k / 30,7k / 1,00 |
+| come la partita d'esempio | 16,6k / 6,3k / 1,93 | 18,2k / 14,0k / 1,33 | 18,7k / 13,5k / 1,50 |
+| contro 2 copie di v2 e un undercutter | 6,8k / 4,6k / 2,80 | 7,2k / 5,2k / 2,20 | **8,8k / 6,8k / 1,73** |
+
+Nella partita d'esempio (seed 4) i punteggi sono: v1 10,6k (2°), v2 9,5k (1°), **v3 11,7k (1°)**.
+
+### Cosa è cambiato (ogni modifica ha un flag in config.py)
+
+| Versione | Modifica | Flag |
 |---|---|---|
-| mixed | 2,57 / 11,1k / 1,2k | **1,00** / 17,2k / 11,4k |
-| aggressive | 1,00 / 18,4k / 8,6k | 1,00 / 14,3k / 9,2k |
-| passive | 1,00 / 26,2k / 22,6k | 1,00 / 33,0k / 28,5k |
-| mirror (contro 4 copie di v1) | 2,83 / 4,9k | **1,00** / 11,5k |
-| duel (contro v1) | — | vince **1,00** di rank medio |
-
-Sui seed di taratura (0-19), v2 vince 20 partite su 20 in tutti i lineup. Con le aste uniform il rank medio passa da 1,97 a 1,07.
-
-### Cosa è cambiato da v1 a v2 (ogni modifica ha un flag in config.py)
-
-| Modifica | Flag | Effetto misurato |
-|---|---|---|
-| Stima della domanda adattiva: crescita che accelera con i sold-out consecutivi (1,2 → 1,44 → 1,73…), bonus se anche i concorrenti alzano i prezzi, calo rapido quando restano scorte | `demand_estimator="adaptive"` | **Il miglioramento più grande da solo** |
-| Previsione del prezzo d'asta con trend (Holt) | `price_forecast="holt"` | Da sola **peggiora**: si offre "giusto" e si perdono troppe aste |
-| Offerta = previsione + 20% del margine tra previsione e valore massimo | `bid_rule="surplus_share"` | Insieme a Holt **migliora**: più vale il materiale per noi, più conviene non perdere l'asta |
-| Tetto: mai più del 20% sopra l'ultimo prezzo d'aggiudicazione | `bid_cap_over_last=0.20` | Limita lo "sforamento" del trend quando il prezzo cambia direzione |
-| Premio che reagisce subito all'ultimo turno | `premium_mode="fast"` | **Peggiora**: lasciato a `"ema"` |
+| v2 | Stima della domanda adattiva: crescita che accelera con i sold-out consecutivi, bonus se anche i concorrenti alzano i prezzi | `demand_estimator="adaptive"` |
+| v2 | Previsione del prezzo d'asta con trend (Holt) | `price_forecast="holt"` |
+| v2 | Offerta = previsione + 20% del margine tra previsione e valore massimo | `bid_rule="surplus_share"` |
+| v2 | Mai più del 20% sopra l'ultimo prezzo d'aggiudicazione | `bid_cap_over_last=0.20` |
+| v3 | **Anti-rincorsa**: se il prezzo d'asta sale da 3 turni e il nostro magazzino cresce (o vendiamo meno dell'80%), offriamo al massimo l'ultimo prezzo d'aggiudicazione, senza trend e senza premio | `anti_escalation=True` |
+| v3 | **Valore ancorato al mercato**: il valore delle materie prime si calcola sul prezzo a cui abbiamo davvero venduto tutto (+10%), non sul prezzo "costo + margine" che sale insieme al costo | `value_anchor="confirmed"` |
+| — | Premio che reagisce subito all'ultimo turno: **peggiora**, non usato | `premium_mode="fast"` |
 
 ### Attenzione
 
-- **Più aggressivi alle aste vuol dire prezzi delle materie prime più alti per tutti**, noi compresi. Nella partita d'esempio (seed 4) v2 batte l'undercutter in modo netto (9,5k contro 6,4k), ma guadagna meno di v1 (10,6k). Se il punteggio è il **profitto assoluto** e non la classifica, riducete `bid_surplus_share` e confrontate di nuovo.
+- **Profitto o classifica?** La v3 compra meno durante le rincorse, quindi in media guadagna di più contro avversari che rincorrono. Però può lasciare materie prime ai rivali. Con le aste uniform, contro copie della v2, il profitto passa da 9,0k a 10,4k ma il rank peggiora da 1,97 a 2,57. Se domani il punteggio è la **classifica relativa**, provate `anti_escalation=False`. Se è il **profitto assoluto**, tenetela.
+- **Il trend sbaglia ancora quando il prezzo cambia direzione.** Al turno 10 della partita d'esempio offriamo 24,3 quando l'asta si chiude a 16,9. Il tetto del +20% sull'ultimo prezzo limita il danno ma non lo elimina.
 - I valori sono tarati sul simulatore di prova. Domani vanno ritarati su quello vero.
