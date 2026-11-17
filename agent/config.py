@@ -10,7 +10,7 @@ DEFAULT_CONFIG = dict(
 
     # --- prezzi ---
     margin_init=0.60,              # markup iniziale sul costo di rimpiazzo (v6: 0.4 → 0.6, meno perdite all'avvio)
-    margin_min=0.15,               # markup minimo (fuori dal finale): mai svendere durante la partita
+    margin_min=0.25,               # markup minimo (fuori dal finale): mai svendere durante la partita (v7: 0.15 → 0.25)
     margin_max=2.0,
     margin_step=0.05,              # di quanto si muove il markup per turno
     sellthrough_high=0.90,         # vendo >= 90% di quello che ho → alzo il prezzo
@@ -33,6 +33,8 @@ DEFAULT_CONFIG = dict(
     # --- produzione ---
     target_stock_turns=1.25,       # produci per coprire 1.25 turni di vendite attese (v6: 1.5 → 1.25)
     initial_sales_share=0.5,       # al turno 0: vendite attese = capacità/n_prodotti * share
+    fair_share_mult=2.0,           # ...ma mai oltre 2× la fetta equa di materie prime (offerta/n agenti); None = spento
+    liquidation_max_discount=0.6,  # svendita finale: mai sotto il 40% del prezzo normale (il fit può sbagliare)
     demand_estimator="adaptive",   # "adaptive" (crescita che accelera) | "ema" (vecchio: vendite*stockout_boost)
     stockout_boost=1.5,            # solo per demand_estimator="ema"
     stockout_boost_base=1.2,       # adaptive: boost = base^k con k = sold-out consecutivi (1.2, 1.44, 1.73...)
@@ -49,7 +51,7 @@ DEFAULT_CONFIG = dict(
     holt_beta=0.3,                 # peso del cambiamento nuovo sul trend
     holt_phi=0.9,                  # smorzamento del trend (1 = nessuno)
     bid_rule="surplus_share",      # "premium": previsione*(1+premium) | "surplus_share": previsione + quota*(tetto - previsione)
-    bid_surplus_share=0.15,        # quota del margine (tetto - previsione) aggiunta all'offerta (v6: 0.3 → 0.15)
+    bid_surplus_share=0.3,         # quota del margine (tetto - previsione) aggiunta all'offerta (v6: 0.15, v7: 0.3)
     bid_cap_over_last=0.20,        # mai offrire più del 20% sopra l'ultimo prezzo d'aggiudicazione (None = nessun tetto)
     infer_clearing=True,           # prezzo d'aggiudicazione nascosto: deducilo da offerte e vincite
     probe_down=0.08,               # ...se vinco tutto, stimo il prezzo 8% sotto la mia offerta più bassa
@@ -63,7 +65,7 @@ DEFAULT_CONFIG = dict(
     change_detect=False,           # CUSUM: se lo scarto è persistente il mercato è cambiato → riparti dal dato nuovo
     cusum_k=0.05,                  # scarto relativo "normale" tollerato per turno
     cusum_h=0.30,                  # soglia di scarto accumulato per dichiarare un cambio
-    anti_escalation=True,          # smetti di inseguire i prezzi d'asta durante una rincorsa
+    anti_escalation=False,         # True = smetti di inseguire i prezzi d'asta in una rincorsa (v7: spento, perde contro squadre competenti)
     escalation_turns=3,            # rincorsa = prezzo d'aggiudicazione in salita per N turni di fila...
     escalation_min_rise=0.02,      # ...ognuno di almeno +2%...
     escalation_sellthrough=0.80,   # ...mentre il magazzino cresce o vendiamo meno dell'80%
@@ -91,6 +93,7 @@ DEFAULT_CONFIG = dict(
 # Quando fate una submission, copiate qui la config consegnata COME DIZIONARIO LETTERALE
 # (non dict(DEFAULT_CONFIG), altrimenti cambia insieme ai default).
 STABLE_CONFIG = dict(  # versione v1 (prima di Holt e domanda adattiva), congelata come dizionario letterale
+    fair_share_mult=None, liquidation_max_discount=1.0,   # v7: spenti per la v1
     ema_alpha=0.3,
     default_material_price=5.0,
     margin_init=0.4,
@@ -171,13 +174,13 @@ STABLE_CONFIG = dict(  # versione v1 (prima di Holt e domanda adattiva), congela
 # Scelta guidata in playbook.md; i valori sono tarati con run_matrix.py (seed di taratura)
 # e verificati su seed separati.
 PROFILES = {
-    "balanced": {},                                    # non si sa niente (= DEFAULT_CONFIG, v4)
-    "rank": dict(anti_escalation=False),               # punteggio = classifica: non mollare le aste agli altri
-    "profit": dict(bid_surplus_share=0.08),            # punteggio = profitto assoluto: compra ancora meno caro
+    "balanced": {},                                    # default v7 (tarato anche su mercati con 20-45 agenti)
+    "v6": dict(anti_escalation=True, margin_min=0.15, bid_surplus_share=0.15),   # default di ieri: per tornare indietro
+    "profit": dict(anti_escalation=True, margin_min=0.15, bid_surplus_share=0.08),  # compra meno caro, molla le aste care
     # aste dove NON si paga la propria offerta (uniform / second_price): offrire vicino al valore costa poco
     "single_price": dict(bid_surplus_share=1.0, bid_surplus_share_uniform=1.0, bid_cap_over_last=None,
                          anti_escalation=False),
-    "glut": dict(margin_min=0.25, market_band_low=0.0),   # magazzino caro / partita corta / guerra di prezzi
+    "glut": dict(market_band_low=0.0),                 # magazzino caro / partita corta (margin_min 0.25 è già default)
 }
 
 

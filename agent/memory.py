@@ -301,7 +301,29 @@ class Memory:
         rec = obs.info.recipes[p]
         return obs.info.labor_cost[p] + sum(q * self.material_price(m) for m, q in rec.items())
 
-    def expected_sales(self, obs: Observation, p: str) -> float:
-        info = obs.info
-        default = info.capacity / max(1, len(info.products)) * self.cfg["initial_sales_share"]
-        return self.ema_sales[p].get(default)
+    def expected_sales(self, obs: Observation, p: str, conservative: bool = False) -> float:
+        """`conservative`: senza il boost da sold-out (per i limiti di fine partita)."""
+        est = self.ema_sales[p]
+        if est.value is None:
+            return self._prior_sales(obs, p)
+        return est.value / self.last_boost[p] if conservative else est.value
+
+    def _prior_sales(self, obs: Observation, p: str) -> float:
+        """Vendite attese senza dati: quota della capacità, ma mai oltre `fair_share_mult` × la nostra
+        fetta equa di materie prime (offerta totale / n agenti), se l'offerta è nota (annunciata o osservata).
+        Con tanti agenti la fetta è piccola: senza questo tetto si chiede 10 volte troppo e si insegue l'asta."""
+        info, cfg = obs.info, self.cfg
+        default = info.capacity / max(1, len(info.products)) * cfg["initial_sales_share"]
+        mult = cfg.get("fair_share_mult")
+        if not mult:
+            return default
+        users = {m: sum(1 for q in info.products if info.recipes[q].get(m, 0) > 0) for m in info.materials}
+        units = []
+        for m, q in info.recipes[p].items():
+            supply = obs.current_supply.get(m)
+            if supply is None and self.supply_hist.get(m):
+                supply = self.supply_hist[m][-1]
+            if supply is None or q <= 0:
+                continue
+            units.append(supply / max(1, info.n_agents) / max(1, users[m]) / q)
+        return min(default, mult * min(units)) if units else default

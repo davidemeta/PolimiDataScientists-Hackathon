@@ -26,7 +26,8 @@ def plan_production(obs: Observation, mem: Memory, cfg: dict, prices: Dict[str, 
             stock = max(0.0, stock - exp_sales)
         target = exp_sales * cfg["target_stock_turns"] - stock
         # non produrre più di quanto si riesce a vendere prima della fine
-        sellable = exp_sales * sell_turns_left - stock
+        # (stima SENZA boost da sold-out: a fine partita l'ottimismo costa scorte svendute)
+        sellable = mem.expected_sales(obs, p, conservative=True) * sell_turns_left - stock
         desired[p] = max(0, int(round(min(target, sellable))))
 
     # capacità: dai priorità ai prodotti con margine unitario più alto

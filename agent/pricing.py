@@ -62,7 +62,8 @@ def _price_for(obs: Observation, mem: Memory, cfg: dict, p: str) -> float:
             a, b = fit
             per_turn = stock / (obs.turns_left + 1)
             clearing = (a - per_turn) / b          # prezzo a cui la domanda ≈ scorte da smaltire
-            price = min(price, clearing)
+            # il fit estrapolato può dare prezzi assurdi (≤ 0): non scendere oltre lo sconto massimo
+            price = min(price, max(clearing, price * (1 - cfg["liquidation_max_discount"])))
         else:
             steps = cfg["liquidation_turns"] - obs.turns_left
             price *= (1 - cfg["liquidation_discount"]) ** steps
