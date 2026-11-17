@@ -36,7 +36,7 @@ sim/                    ← SOLO PER I TEST LOCALI
   market.py             simulatore di prova: aste pay-as-bid/uniform/second_price, domanda logit/linear/cheapest_first,
                         tempi della filiera, informazioni nascoste, costi
   scenarios.py          catalogo di 28 varianti di mercato (+ dove aggiungere lo scenario "real" domani)
-  opponents.py          12 tipi di avversario + lineup casuale "league"
+  opponents.py          14 tipi di avversario (compresi Switcher e Trembler) + lineup casuale "league"
 adapter.py              ← DA COMPLETARE DOMANI: traduce l'API vera ↔ Observation/Action, sceglie il PROFILE
 run_game.py, run_tournament.py, run_matrix.py, tests/, playbook.md
 ```
@@ -100,6 +100,8 @@ Il dettaglio per scenario e profilo è in [playbook.md](playbook.md).
 | v4 | Ritardo della filiera: acquisti, produzione e finale coerenti con `sell_same_turn` / `production_after_auction` | automatico |
 | v4 | Tipo d'asta noto → regola d'offerta automatica; offerta annunciata → offerte più o meno aggressive | `auto_auction_rule`, `supply_sensitivity` |
 | v4 | Pavimento ai prezzi: niente guerre di prezzo | `margin_min=0.15`, `market_band_low=0.05` |
+
+**Avversari che cambiano strategia o sbagliano a caso** (lineup `chaos`: 2 switcher e 3 trembler): 20 vittorie su 20 su `base`, rank 1,05-1,08 sui 28 scenari. Statistiche robuste e rilevamento dei cambi (CUSUM) sono disponibili come flag ma **non migliorano**, quindi restano spenti (dettagli nel playbook §5).
 
 ### Attenzione
 

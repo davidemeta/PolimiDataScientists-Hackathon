@@ -17,8 +17,8 @@ from agent.config import STABLE_CONFIG, make_config
 from agent.core import SmartAgent
 from sim.market import Market, MarketConfig
 from agent.config import DEFAULT_CONFIG
-from sim.opponents import (Colluder, Copycat, Dumper, FixedAgent, HighPricer, Hoarder, Overbidder,
-                           RandomAgent, Undercutter, league)
+from sim.opponents import (BanditPricer, Colluder, Copycat, Dumper, FixedAgent, HighPricer, Hoarder, Overbidder,
+                           RandomAgent, Switcher, Trembler, Undercutter, league)
 
 OURS = "team"
 
@@ -37,6 +37,10 @@ LINEUPS: Dict[str, Callable] = {
     # squadre che sanno fare il loro mestiere: copie della versione attuale + strategie "intelligenti"
     "self": lambda cfg, s: [SmartAgent(OURS, cfg)] + [SmartAgent(f"cur{k}", DEFAULT_CONFIG) for k in range(3)],
     "tough": lambda cfg, s: [SmartAgent(OURS, cfg), Hoarder(), Dumper(), Colluder(), Copycat()],
+    # avversari che cambiano strategia e agenti "scarsi" che sbagliano a caso
+    "chaos": lambda cfg, s: [SmartAgent(OURS, cfg), Switcher("sw1", seed=s), Switcher("sw2", period=5, seed=s + 1),
+                             Trembler("tr1", seed=s + 2), Trembler("tr2", inner=BanditPricer(seed=s), eps=0.3, seed=s + 3),
+                             Trembler("tr3", inner=SmartAgent("smart_tr", DEFAULT_CONFIG), eps=0.15, seed=s + 4)],
 }
 
 

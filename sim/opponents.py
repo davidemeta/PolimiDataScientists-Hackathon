@@ -243,6 +243,64 @@ class Sniper(BaseAgent):
         return Action(_bids_for(obs, prod, lambda m: _mat_price(obs, m, 6.0) + 0.01), prod, prices)
 
 
+class Switcher(BaseAgent):
+    """
+    Cambia strategia durante la partita: ogni `period` turni (con un po' di casualità) passa a un
+    altro agente della lista. Simula squadre che caricano una nuova versione, bandit che si
+    stabilizzano, o agenti con logiche a fasi.
+    """
+
+    def __init__(self, name="switcher", strategies=None, period=8, seed=None):
+        self.name = name
+        self.rng = random.Random(seed)
+        self.strategies = strategies or [BanditPricer(seed=seed), Sniper(), Dumper(), HighPricer(), Undercutter()]
+        self.period = period
+        self._reset()
+
+    def _reset(self):
+        self.current = self.rng.randrange(len(self.strategies))
+        self.next_switch = self.period + self.rng.randint(-2, 2)
+
+    def act(self, obs):
+        if obs.turn == 0:
+            self._reset()
+        if obs.turn >= self.next_switch:
+            choices = [i for i in range(len(self.strategies)) if i != self.current]
+            self.current = self.rng.choice(choices)
+            self.next_switch = obs.turn + self.period + self.rng.randint(-2, 2)
+        return self.strategies[self.current].act(obs)
+
+
+class Trembler(BaseAgent):
+    """
+    Agente "scarso": di solito segue una strategia sensata, ma con probabilità `eps` per ogni
+    decisione fa una cosa assurda (prezzo ×0.2 o ×4, offerta enorme, produzione zero).
+    Simula bug, LLM poco affidabili, errori di unità di misura.
+    """
+
+    def __init__(self, name="trembler", inner=None, eps=0.2, seed=None):
+        self.name = name
+        self.inner = inner or Copycat()
+        self.eps = eps
+        self.rng = random.Random(seed)
+
+    def act(self, obs):
+        a = self.inner.act(obs)
+        r = self.rng
+        prices = {p: (round(v * r.choice([0.2, 4.0]), 2) if r.random() < self.eps else v) for p, v in a.prices.items()}
+        bids = []
+        for b in a.bids:
+            if r.random() < self.eps:
+                if r.random() < 0.5:
+                    bids.append(Bid(b.material, round(b.price * 5, 2), max(1, b.qty // 4)))   # offerta altissima
+                else:
+                    bids.append(Bid(b.material, round(max(0.5, b.price * 0.2), 2), b.qty * 3))  # offerta bassissima
+            else:
+                bids.append(b)
+        production = {p: (0 if r.random() < self.eps else q) for p, q in a.production.items()}
+        return Action(bids, production, prices)
+
+
 def opponent_pool(seed: int):
     """Tutti i tipi di avversario, per estrarre lineup casuali ('league')."""
     from agent.config import STABLE_CONFIG
@@ -260,6 +318,8 @@ def opponent_pool(seed: int):
         lambda k: BanditPricer(f"bandit{k}", seed=seed + k),
         lambda k: Sniper(f"sniper{k}"),
         lambda k: SmartAgent(f"v1_{k}", STABLE_CONFIG),
+        lambda k: Switcher(f"switcher{k}", seed=seed + 31 * k),
+        lambda k: Trembler(f"trembler{k}", seed=seed + 17 * k),
     ]
 
 

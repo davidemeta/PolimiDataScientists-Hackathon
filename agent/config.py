@@ -53,6 +53,11 @@ DEFAULT_CONFIG = dict(
     auto_auction_rule=True,        # se il tipo d'asta è noto: second_price → offri il valore; uniform → quota più alta
     bid_surplus_share_uniform=0.5, # quota del margine con asta uniform (si paga il prezzo unico, non la propria offerta)
     supply_sensitivity=1.0,        # offerta annunciata: quota del margine * (offerta_media / offerta_attuale)^sens
+    comp_stat="mean",              # "mean" | "median": statistica dei prezzi dei concorrenti (median = robusta agli outlier)
+    clear_outlier_cap=None,        # limita un dato d'asta anomalo a previsione ±cap (es. 0.4); None = nessun limite
+    change_detect=False,           # CUSUM: se lo scarto è persistente il mercato è cambiato → riparti dal dato nuovo
+    cusum_k=0.05,                  # scarto relativo "normale" tollerato per turno
+    cusum_h=0.30,                  # soglia di scarto accumulato per dichiarare un cambio
     anti_escalation=True,          # smetti di inseguire i prezzi d'asta durante una rincorsa
     escalation_turns=3,            # rincorsa = prezzo d'aggiudicazione in salita per N turni di fila...
     escalation_min_rise=0.02,      # ...ognuno di almeno +2%...
@@ -115,6 +120,11 @@ STABLE_CONFIG = dict(  # versione v1 (prima di Holt e domanda adattiva), congela
     auto_auction_rule=False,
     bid_surplus_share_uniform=0.5,
     supply_sensitivity=0.0,
+    comp_stat='mean',
+    clear_outlier_cap=None,
+    change_detect=False,
+    cusum_k=0.05,
+    cusum_h=0.3,
     anti_escalation=False,
     escalation_turns=3,
     escalation_min_rise=0.02,

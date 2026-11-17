@@ -151,6 +151,23 @@ Risultati attuali sui seed di taratura: lineup `league` (3-7 avversari casuali) 
 
 ---
 
+### Avversari che cambiano strategia o sbagliano a caso
+
+Nella libreria ci sono anche:
+- **Switcher**, che cambia strategia ogni 5-8 turni circa (bandit → sniper → dumper…);
+- **Trembler**, un agente "scarso" che nel 15-30% delle decisioni fa una cosa assurda: prezzo ×0,2 o ×4, offerta ×5, produzione zero.
+
+Il lineup `chaos` ne mette 5 insieme. L'agente **vince 20 partite su 20** su `base`, e su tutti i 28 scenari ha rank 1,05-1,08.
+
+Ho provato tre protezioni, tutte disponibili come flag ma spente di default:
+- `comp_stat="median"`: mediana dei prezzi dei concorrenti;
+- `clear_outlier_cap=0.4`: limite ai dati d'asta anomali;
+- `change_detect=True`: rilevamento dei cambi (CUSUM), che fa ripartire le stime dal dato nuovo.
+
+**Nessuna migliora**, su nessuno dei tre blocchi di seed: il profitto scende di 0,2-1,2k e il rank non cambia oltre il rumore. Il motivo probabile è che l'agente non classifica gli avversari ma reagisce ai segnali aggregati (prezzo d'asta, vendite, magazzino), che assorbono già i cambi di strategia. Inoltre filtrare i dati "strani" fa perdere anche le informazioni vere.
+
+**Quando riprovarle domani:** se nel log (`logs/live.csv`) vedete i prezzi dei concorrenti (`comp_*`) saltare in modo assurdo da un turno all'altro e l'agente inseguirli. Confrontate con `run_tournament.py --scenario real --set comp_stat=median`.
+
 ## 6. Limiti da tenere a mente
 
 - **Tutto è tarato sul simulatore di prova.** Il valore del playbook è nella *direzione* (quale profilo per quale tipo di gioco e quali parametri toccare), non nei numeri esatti.

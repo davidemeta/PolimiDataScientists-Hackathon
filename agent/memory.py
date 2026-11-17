@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Tuple
 
+import statistics
+
 from agent.estimators import EMA, Holt, mean
 from agent.interface import Action, Observation
 
@@ -29,6 +31,10 @@ class Memory:
         self.premium: Dict[str, float] = {m: cfg["bid_premium"] for m in info.materials}
         self.clear_hist: Dict[str, List[float]] = {m: [] for m in info.materials}
         self.supply_hist: Dict[str, List[int]] = {m: [] for m in info.materials}
+        # rilevamento di cambi improvvisi (CUSUM) sul prezzo d'aggiudicazione e sui prezzi dei concorrenti
+        self.cusum_clear: Dict[str, List[float]] = {m: [0.0, 0.0] for m in info.materials}
+        self.cusum_comp: Dict[str, List[float]] = {p: [0.0, 0.0] for p in info.products}
+        self.changes_detected = 0
         # rincorsa: magazzino che cresce / vendite che non tengono il passo
         self.prev_total_stock: Optional[int] = None
         self.stock_growing = False
@@ -76,8 +82,7 @@ class Memory:
             if cp is None and cfg["infer_clearing"] and req > 0:
                 cp = self._implied_clearing(m, last, obs)
             if cp is not None:
-                self.ema_clear[m].update(cp)
-                self.holt_clear[m].update(cp)
+                self._feed_clearing(m, cp)
                 self.clear_hist[m].append(cp)
             if req <= 0:
                 continue
@@ -97,6 +102,37 @@ class Memory:
                 elif ema_wr < cfg["winrate_low"]:
                     self.premium[m] += cfg["premium_step"]
             self.premium[m] = min(cfg["premium_max"], max(cfg["premium_min"], self.premium[m]))
+
+    def _cusum(self, state: List[float], x: float, expected: float) -> bool:
+        """CUSUM a due lati sullo scarto relativo: True quando si accumula uno scarto persistente."""
+        cfg = self.cfg
+        r = (x - expected) / max(abs(expected), 1e-6)
+        state[0] = max(0.0, state[0] + r - cfg["cusum_k"])
+        state[1] = max(0.0, state[1] - r - cfg["cusum_k"])
+        if state[0] > cfg["cusum_h"] or state[1] > cfg["cusum_h"]:
+            state[0] = state[1] = 0.0
+            self.changes_detected += 1
+            return True
+        return False
+
+    def _feed_clearing(self, m: str, cp: float) -> None:
+        """
+        Aggiorna le stime del prezzo d'aggiudicazione.
+          - change_detect: se lo scarto dalla previsione è persistente (CUSUM), riparti dal dato nuovo
+          - clear_outlier_cap: altrimenti, un singolo dato anomalo viene limitato a previsione ±cap
+        """
+        cfg = self.cfg
+        holt, ema = self.holt_clear[m], self.ema_clear[m]
+        fc = holt.forecast() if cfg["price_forecast"] == "holt" else ema.value
+        if fc is not None and cfg["change_detect"] and self._cusum(self.cusum_clear[m], cp, fc):
+            holt.level, holt.trend, ema.value = cp, 0.0, cp
+            return
+        x = cp
+        cap = cfg["clear_outlier_cap"]
+        if fc is not None and cap is not None:
+            x = min(max(cp, fc * (1 - cap)), fc * (1 + cap))
+        ema.update(x)
+        holt.update(x)
 
     def _implied_clearing(self, m: str, last: Action, obs: Observation) -> Optional[float]:
         """
@@ -129,13 +165,19 @@ class Memory:
 
     def _update_product(self, obs: Observation, last: Action, p: str) -> None:
         cfg = self.cfg
-        comp = mean(obs.last_competitor_prices.get(p) or [])
+        comp_list = obs.last_competitor_prices.get(p) or []
+        # mediana: un singolo prezzo assurdo (agente "scarso") non sposta la stima
+        comp = (statistics.median(comp_list) if comp_list else None) if cfg["comp_stat"] == "median" else mean(comp_list)
         comp_rising = False
         if comp is not None:
             prev = self.prev_comp[p]
             comp_rising = prev is not None and comp > prev * (1 + cfg["comp_rise_threshold"])
             self.prev_comp[p] = comp
-            self.ema_comp[p].update(comp)
+            ema = self.ema_comp[p]
+            if cfg["change_detect"] and ema.value is not None and self._cusum(self.cusum_comp[p], comp, ema.value):
+                ema.value = comp          # il mercato è cambiato: riparti dal dato nuovo
+            else:
+                ema.update(comp)
 
         sold = obs.last_sales.get(p, 0)
         left = obs.product_inventory.get(p, 0)
