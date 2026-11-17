@@ -42,6 +42,9 @@ def to_game_info(raw: Any) -> GameInfo:
         salvage_value=raw.get("salvage_value", 0.0),
         sell_same_turn=raw.get("sell_same_turn", True),
         production_after_auction=raw.get("production_after_auction", False),  # prudente
+        # TODO: se il regolamento dice il tipo d'asta, mettetelo qui ("pay_as_bid" | "uniform" | "second_price"):
+        #       l'agente adatta da solo la regola d'offerta. Se non si sa, lasciate None.
+        auction_type=raw.get("auction_type"),
     )
 
 
@@ -63,6 +66,8 @@ def to_observation(raw: Any, info: GameInfo) -> Observation:
         last_produced=raw.get("last_produced", {}),
         last_sales=raw.get("last_sales", {}),
         last_competitor_prices=raw.get("competitor_prices", {}),
+        # TODO: se il gioco annuncia le unità in vendita all'asta PRIMA delle offerte, mappatele qui
+        current_supply=raw.get("current_supply", {}),
     )
 
 

@@ -15,7 +15,7 @@ python3 run_tournament.py                        # torneo contro 8 gruppi di avv
 python3 run_tournament.py --lineup league --scenario uniform --profile single_price
 python3 run_tournament.py --sweep "bid_surplus_share=0.1,0.2,0.3,0.5" --scenario real
 python3 run_matrix.py --quick --scenario base    # quale profilo conviene? (meno di 1 secondo)
-python3 run_matrix.py                            # matrice completa 26 scenari × 6 profili (circa 15 secondi)
+python3 run_matrix.py --seeds fresh              # matrice completa 28 scenari × 5 profili (circa 15 secondi)
 ```
 
 ## Struttura
@@ -24,7 +24,7 @@ python3 run_matrix.py                            # matrice completa 26 scenari �
 agent/                  ← IL NOSTRO AGENTE (quello che si consegna)
   interface.py          Observation / Action / GameInfo (il "contratto" agente ↔ gioco)
   core.py               SmartAgent.act(obs): flusso del turno, try/except, fallback sicuro, reset a nuova partita
-  config.py             TUTTI i parametri + PROFILES (balanced, rank, profit, single_price, scarce, glut) + STABLE_CONFIG (v1)
+  config.py             TUTTI i parametri + PROFILES (balanced, rank, profit, single_price, glut) + STABLE_CONFIG (v1)
   memory.py             storia di mercato: EMA dei prezzi d'asta, dei concorrenti e delle vendite; markup adattivo; premium d'asta
   estimators.py         EMA, regressione lineare della domanda, prezzo ottimo p* = (a/b + c)/2
   pricing.py            prezzo: markup adattivo + modello di domanda + banda di mercato + esplorazione + liquidazione finale
@@ -35,7 +35,7 @@ agent/                  ← IL NOSTRO AGENTE (quello che si consegna)
 sim/                    ← SOLO PER I TEST LOCALI
   market.py             simulatore di prova: aste pay-as-bid/uniform/second_price, domanda logit/linear/cheapest_first,
                         tempi della filiera, informazioni nascoste, costi
-  scenarios.py          catalogo di 26 varianti di mercato (+ dove aggiungere lo scenario "real" domani)
+  scenarios.py          catalogo di 28 varianti di mercato (+ dove aggiungere lo scenario "real" domani)
   opponents.py          12 tipi di avversario + lineup casuale "league"
 adapter.py              ← DA COMPLETARE DOMANI: traduce l'API vera ↔ Observation/Action, sceglie il PROFILE
 run_game.py, run_tournament.py, run_matrix.py, tests/, playbook.md
@@ -66,7 +66,7 @@ run_game.py, run_tournament.py, run_matrix.py, tests/, playbook.md
 
 ## Risultati attuali (simulatore di prova)
 
-La versione di default è la **v4** (profilo `balanced`). Rispetto alla v3 aggiunge un pavimento ai prezzi: `margin_min=0.15` e mai più del 5% sotto la media dei concorrenti. Con questa modifica, su 23 scenari pay-as-bid con seed di verifica, il rank medio passa da 1,47 a 1,33 e il profitto da 14,1k a 14,6k.
+La versione di default è la **v4** (profilo `balanced`). Rispetto alla v3 aggiunge un pavimento ai prezzi: `margin_min=0.15` e mai più del 5% sotto la media dei concorrenti. Il miglioramento è piccolo. Su 23 scenari pay-as-bid, con seed mai usati per decidere (5000+) e avversari mixed, league e tough, il rank passa da 1,112 a 1,096 e il profitto da 15,6k a 16,1k.
 
 Lineup sullo scenario `base`, 20 partite:
 
@@ -78,13 +78,13 @@ Lineup sullo scenario `base`, 20 partite:
 | league (3-7 avversari casuali) | 14,8k | 8,1k | 1,10 | 18/20 |
 | tough (hoarder, dumper, colluder, copycat) | 10,2k | 9,1k | 1,05 | 19/20 |
 
-**Robustezza agli scenari.** Prima di questo lavoro l'agente crollava in diversi scenari. Il motivo era che aveva informazioni nascoste o una filiera lenta, e non le gestiva:
+**Robustezza agli scenari.** Prima di questo lavoro l'agente crollava in diversi scenari, perché non gestiva le informazioni nascoste e la filiera lenta. Il test è lo stesso per le due colonne: 6 agenti, seed 0-9.
 
-| Scenario | Prima (v3) | Ora |
+| Scenario | v3 | v4 |
 |---|---|---|
-| prezzo d'aggiudicazione nascosto | 0,5k | 18,1k |
-| nessuna informazione | 0,4k | 15,3k |
-| filiera lenta (produzione da magazzino, vendita il turno dopo), rank | 3,6 | 1,1 |
+| prezzo d'aggiudicazione nascosto | 0,5k | 17,0k |
+| nessuna informazione | 0,4k | 14,0k |
+| filiera lenta (produzione da magazzino, vendita il turno dopo), rank | 3,6 | 1,0 |
 | scenario peggiore combinato, rank | 4,2 | 1,0 |
 
 Il dettaglio per scenario e profilo è in [playbook.md](playbook.md).

@@ -25,8 +25,10 @@ from agent.config import PROFILES, make_config
 from run_tournament import OURS, run_lineup
 from sim.scenarios import SCENARIOS
 
-DEFAULT_LINEUPS = ["mixed", "league", "tough", "self"]
-SEEDS = {"tune": 0, "holdout": 1000}
+# "self" (copie di balanced) NON è nel default: favorisce artificialmente ogni profilo diverso da balanced
+DEFAULT_LINEUPS = ["mixed", "league", "tough"]
+# tune = taratura; holdout = usato per scegliere v2-v4 (non più indipendente); fresh = mai usato per decidere
+SEEDS = {"tune": 0, "holdout": 1000, "fresh": 5000}
 
 
 def _cell(args: Tuple[str, str, str, int, int]) -> dict:

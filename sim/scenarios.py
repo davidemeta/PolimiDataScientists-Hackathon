@@ -25,6 +25,8 @@ SCENARIOS.update({
     "uniform": make(auction_type="uniform"),
     "second_price": make(auction_type="second_price"),
     "known_auction": make(announce_auction_type=True),          # l'agente sa che è pay-as-bid
+    "known_uniform": make(auction_type="uniform", announce_auction_type=True),
+    "known_second_price": make(auction_type="second_price", announce_auction_type=True),
     "announced_supply": make(announce_supply=True, supply_noise=0.4),
     "high_reserve": make(reserve_price={"A": 6.0, "B": 6.0}),
     # --- forma della domanda ---

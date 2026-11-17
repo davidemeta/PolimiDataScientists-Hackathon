@@ -4,39 +4,43 @@ Scopo: trasformare le risposte del briefing (14:30-14:45) in **un profilo dell'a
 
 - La strategia generale è in [strategy.md](strategy.md).
 - I concetti economici sono in [knowledge_base.md](knowledge_base.md).
-- I numeri citati qui vengono da `run_matrix.py`: 26 scenari × 6 profili × 4 gruppi di avversari, ripetuti su **due set di seed indipendenti**. Un profilo diverso da `balanced` è consigliato solo se migliora il rank su entrambi i set.
+- I numeri citati qui vengono da `run_matrix.py`: 28 scenari × 5 profili × 3 gruppi di avversari, su tre blocchi di seed. L'ultimo blocco non è mai stato usato per decidere (metodo nel §2).
 
 ---
 
 ## 1. Albero decisionale (seguitelo in quest'ordine)
 
 ```
-1. TIPO D'ASTA
-   ├─ si paga la PROPRIA offerta (pay-as-bid / primo prezzo) ........ vai al punto 2
-   └─ prezzo unico (uniform) o secondo prezzo ...................... profilo  single_price
-         (offrire vicino al valore costa poco: con second_price il rank passa da 1,73 a 1,02,
-          con uniform da 1,43 a 1,18)
-         → poi passate direttamente al punto 5
+1. TIPO D'ASTA  (e scrivetelo in adapter.py → GameInfo.auction_type!)
+   ├─ si paga la PROPRIA offerta (pay-as-bid / primo prezzo) ...... balanced  → vai al punto 2
+   ├─ secondo prezzo
+   │    ├─ e l'avete scritto in auction_type ...................... balanced  (offre già il valore da solo)
+   │    └─ non si sa con certezza / non impostato ................. single_price  (rank da 1,43 a 1,08)
+   └─ prezzo unico (uniform)
+        ├─ punteggio = profitto ................................... single_price  (circa +1k di profitto, stesso rank)
+        └─ punteggio = classifica ................................. balanced
+   (con uniform o second_price il punto 2 non si applica)
 
-2. DOMANDA E MATERIE PRIME
-   ├─ materie prime scarse e domanda alta (sold-out facili) ....... profilo  scarce
-   ├─ domanda lineare / rumorosa, prezzo minimo d'asta alto,
-   │  magazzino caro, cassa iniziale bassa, guerra di prezzi ...... profilo  glut
-   └─ non si sa / misto ........................................... profilo  balanced
+2. COSTI E DURATA (solo con aste pay-as-bid)
+   ├─ magazzino caro (costo di stoccaggio alto) ..................... glut   (rank da 1,20 a 1,08)
+   ├─ partita corta (≤ 15 turni) .................................... glut   (rank da 1,87 a 1,55)
+   └─ tutto il resto ................................................ balanced
+        (glut è in media appena meglio: rank 1,06 contro 1,10, +0,5k di profitto.
+         Provatelo con il comando rapido del §3 sullo scenario vero)
 
 3. TEMPI (se diversi da "compro, produco e vendo nello stesso turno")
    └─ già gestiti dall'agente: impostate SOLO i flag in GameInfo (adapter.py)
         sell_same_turn=False           → si vende il turno dopo la produzione
         production_after_auction=False → si produce solo con materiali già in magazzino
-      Con "vendo il turno dopo" il profilo scarce rende di più (rank da 1,43 a 1,27)
 
 4. INFORMAZIONI VISIBILI
    └─ già gestite: se manca il prezzo d'aggiudicazione l'agente lo deduce dalle proprie
       vincite; se mancano i prezzi dei concorrenti salta l'ancoraggio al mercato.
       Lasciate il campo vuoto nell'adapter, NON mettete zero.
+      Se il gioco annuncia le unità all'asta prima delle offerte → current_supply.
 
 5. PUNTEGGIO (si applica sopra il profilo scelto)
-   ├─ classifica relativa ........ override  anti_escalation=False   (oppure profilo rank)
+   ├─ classifica relativa ........ override  anti_escalation=False   (= profilo rank)
    ├─ profitto assoluto .......... lasciate anti_escalation=True (default)
    └─ media su più partite ....... guardate il MINIMO nel torneo, non solo la media
 ```
@@ -44,39 +48,44 @@ Scopo: trasformare le risposte del briefing (14:30-14:45) in **un profilo dell'a
 **Come combinare un profilo con gli override.** In `adapter.py` cambiate `PROFILE`, oppure scrivete:
 
 ```python
-SmartAgent(name="team", profile="single_price", config={"anti_escalation": False})
+SmartAgent(name="team", profile="glut", config={"anti_escalation": False})
 ```
 
 ---
 
-## 2. Scenario → profilo consigliato
+## 2. Cosa dicono i numeri
 
-Il rank è quello sui seed di verifica (holdout), come media su 4 gruppi di avversari: mixed, league, tough e self.
+**Metodo.** Le misure vengono da `run_matrix.py`: 28 scenari × 5 profili × 3 gruppi di avversari (mixed, league, tough), su tre blocchi di seed:
+- `tune` (0-…);
+- `holdout` (1000-…), già usato per scegliere v2-v4, quindi non più indipendente;
+- `fresh` (5000-…, 20 partite), **mai usato per decidere nulla**.
 
-| Scenario (`sim/scenarios.py`) | Profilo | Rank (balanced) | Profitto (balanced) |
+Un profilo diverso da `balanced` è consigliato solo se migliora su `tune` **e** `holdout` e poi si conferma su `fresh`.
+
+**Risultato:** in quasi tutti gli scenari `balanced` va bene quanto i profili specializzati. L'agente si adatta già da solo ai tempi, alle informazioni nascoste e alla scarsità. Le eccezioni, confermate su tutti e tre i blocchi, sono queste:
+
+| Scenario | Profilo | Rank fresh (balanced) | Profitto fresh (balanced) |
 |---|---|---|---|
-| `base`, `known_auction`, `announced_supply`, `salvage`, `fixed_costs`, `prod_from_stock`, `hidden_clearing`, `blind`, `glut`, `short`, `hard_mix` | **balanced** | 1,32–1,63 | — |
-| `uniform` | **single_price** | 1,18 (1,43) | 14,6k (13,2k) |
-| `second_price` | **single_price** | 1,02 (1,73) | 20,8k (14,5k) |
-| `uniform_linear_short` | **single_price** | 1,47 (1,68) | 6,4k (6,4k) |
-| `cheapest_first` | **scarce** | 1,33 (1,52) | 15,5k (14,8k) |
-| `sell_next_turn` | **scarce** | 1,27 (1,43) | 12,2k (12,6k) |
-| `long` (80 turni) | **scarce** | 1,08 (1,40) | 41,2k (41,2k) |
-| `linear_demand` | **glut** | 1,32 (1,52) | 13,0k (12,0k) |
-| `noisy_demand` | **glut** | 1,37 (1,53) | 13,4k (12,7k) |
-| `high_reserve` | **glut** | 1,35 (1,45) | 13,6k (13,0k) |
-| `scarce` | **glut** | 1,43 (1,57) | 11,2k (10,6k) |
-| `costly_storage` | **glut** | 1,42 (1,53) | 13,3k (12,6k) |
-| `low_cash` | **glut** | 1,32 (1,50) | 16,2k (13,7k) |
-| `slow_pipeline` | **glut** | 1,27 (1,42) | 14,0k (13,0k) |
-| `single_product` | **glut** | 1,42 (1,57) | 10,4k (10,1k) |
-| `hidden_prices` | **rank** | 1,33 (1,48) | 16,3k (16,2k) |
+| `second_price` (tipo d'asta **non** indicato all'agente) | **single_price** | 1,08 (1,43) | 18,5k (13,4k) |
+| `known_second_price` (tipo d'asta indicato) | balanced | 1,13 | 18,6k (la regola automatica offre già il valore) |
+| `uniform` / `known_uniform` | **single_price** se il punteggio è il profitto | 1,15 (1,08-1,17) | 14,3k (13,1-13,6k) |
+| `costly_storage` | **glut** | 1,08 (1,20) | 14,8k (14,3k) |
+| `short` (10 turni) | **glut** | 1,55 (1,87) | 5,8k (5,5k) |
+| tutti gli altri 22 scenari | **balanced** | 1,00-1,17 | — |
 
-**Il profilo `single_price` è da usare SOLO con aste uniform o second_price.** Con aste pay-as-bid è disastroso: rank circa 4, profitto circa 3k, perché paga ogni unità al proprio valore.
+Media su `fresh` degli scenari pay-as-bid:
 
-**Se non sapete scegliere tra `balanced` e `glut`**: su tutti gli scenari pay-as-bid `glut` è leggermente meglio, sia per rank (1,04-1,08 contro 1,05-1,10, escluso il gruppo `self`) sia per profitto (+0,5k). Domani provate entrambi con il comando rapido del §3.
+| Profilo | Rank | Profitto |
+|---|---|---|
+| balanced | 1,096 | 16,1k |
+| rank | 1,078 | 16,2k |
+| profit | 1,069 | 16,2k |
+| glut | 1,064 | 16,7k |
+| single_price | 4,08 | 3,0k |
 
-> Nota sul gruppo `self`: lì gli avversari sono copie di `balanced`, quindi qualsiasi profilo diverso parte avvantaggiato e `balanced` contro sé stesso fa circa 2,5 per simmetria. Per questo i rank assoluti sono intorno a 1,3-1,5 e non 1,0. Contano i confronti tra profili, non il valore assoluto.
+**Il profilo `single_price` va usato SOLO con aste uniform o second_price.** Con aste pay-as-bid è disastroso: rank circa 4, profitto circa 3k, perché paga ogni unità al proprio valore.
+
+> Nota: nelle prime misure avevo incluso anche un gruppo `self` (avversari = copie di `balanced`). Lì `balanced` fa circa 2,5 per simmetria e ogni altro profilo parte avvantaggiato, cosa che gonfiava i vantaggi dei profili. È stato tolto dal default di `run_matrix.py`, ma si può ancora usare con `--lineup self`.
 
 ---
 

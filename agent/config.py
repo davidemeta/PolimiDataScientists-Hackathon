@@ -150,9 +150,9 @@ PROFILES = {
     "rank": dict(anti_escalation=False),               # punteggio = classifica: non mollare le aste agli altri
     "profit": dict(bid_surplus_share=0.15),            # punteggio = profitto assoluto: compra meno caro
     # aste dove NON si paga la propria offerta (uniform / second_price): offrire vicino al valore costa poco
-    "single_price": dict(bid_surplus_share=1.0, bid_cap_over_last=None, anti_escalation=False),
-    "scarce": dict(target_stock_turns=2.0, stockout_boost_base=1.35),   # domanda > offerta: più volume
-    "glut": dict(margin_min=0.25, market_band_low=0.0),                 # guerra di prezzi: tieni il margine
+    "single_price": dict(bid_surplus_share=1.0, bid_surplus_share_uniform=1.0, bid_cap_over_last=None,
+                         anti_escalation=False),
+    "glut": dict(margin_min=0.25, market_band_low=0.0),   # magazzino caro / partita corta / guerra di prezzi
 }
 
 
