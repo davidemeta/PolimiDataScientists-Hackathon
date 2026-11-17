@@ -47,6 +47,12 @@ DEFAULT_CONFIG = dict(
     bid_rule="surplus_share",      # "premium": previsione*(1+premium) | "surplus_share": previsione + quota*(tetto - previsione)
     bid_surplus_share=0.2,         # solo surplus_share: quota del margine (tetto - previsione) aggiunta all'offerta
     bid_cap_over_last=0.20,        # mai offrire più del 20% sopra l'ultimo prezzo d'aggiudicazione (None = nessun tetto)
+    infer_clearing=True,           # prezzo d'aggiudicazione nascosto: deducilo da offerte e vincite
+    probe_down=0.08,               # ...se vinco tutto, stimo il prezzo 8% sotto la mia offerta più bassa
+    probe_up=0.10,                 # ...se non vinco niente, 10% sopra la mia offerta più alta
+    auto_auction_rule=True,        # se il tipo d'asta è noto: second_price → offri il valore; uniform → quota più alta
+    bid_surplus_share_uniform=0.5, # quota del margine con asta uniform (si paga il prezzo unico, non la propria offerta)
+    supply_sensitivity=1.0,        # offerta annunciata: quota del margine * (offerta_media / offerta_attuale)^sens
     anti_escalation=True,          # smetti di inseguire i prezzi d'asta durante una rincorsa
     escalation_turns=3,            # rincorsa = prezzo d'aggiudicazione in salita per N turni di fila...
     escalation_min_rise=0.02,      # ...ognuno di almeno +2%...
@@ -103,6 +109,12 @@ STABLE_CONFIG = dict(  # versione v1 (prima di Holt e domanda adattiva), congela
     bid_rule='premium',
     bid_surplus_share=0.3,
     bid_cap_over_last=None,
+    infer_clearing=False,
+    probe_down=0.08,
+    probe_up=0.1,
+    auto_auction_rule=False,
+    bid_surplus_share_uniform=0.5,
+    supply_sensitivity=0.0,
     anti_escalation=False,
     escalation_turns=3,
     escalation_min_rise=0.02,

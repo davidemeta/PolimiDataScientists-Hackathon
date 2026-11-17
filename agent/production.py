@@ -21,6 +21,9 @@ def plan_production(obs: Observation, mem: Memory, cfg: dict, prices: Dict[str, 
             continue
         exp_sales = mem.expected_sales(obs, p)
         stock = obs.product_inventory.get(p, 0)
+        if not info.sell_same_turn:
+            # si vende da domani: le scorte di oggi coprono le vendite di oggi, produciamo per domani
+            stock = max(0.0, stock - exp_sales)
         target = exp_sales * cfg["target_stock_turns"] - stock
         # non produrre più di quanto si riesce a vendere prima della fine
         sellable = exp_sales * sell_turns_left - stock

@@ -28,6 +28,7 @@ class Memory:
         self.last_winrate: Dict[str, Optional[float]] = {m: None for m in info.materials}
         self.premium: Dict[str, float] = {m: cfg["bid_premium"] for m in info.materials}
         self.clear_hist: Dict[str, List[float]] = {m: [] for m in info.materials}
+        self.supply_hist: Dict[str, List[int]] = {m: [] for m in info.materials}
         # rincorsa: magazzino che cresce / vendite che non tengono il passo
         self.prev_total_stock: Optional[int] = None
         self.stock_growing = False
@@ -67,12 +68,17 @@ class Memory:
         for b in last.bids:
             requested[b.material] = requested.get(b.material, 0) + b.qty
         for m in obs.info.materials:
+            if obs.last_supply.get(m) is not None:
+                self.supply_hist[m].append(obs.last_supply[m])
+                del self.supply_hist[m][:-10]
+            req = requested.get(m, 0)
             cp = obs.last_clearing_price.get(m)
+            if cp is None and cfg["infer_clearing"] and req > 0:
+                cp = self._implied_clearing(m, last, obs)
             if cp is not None:
                 self.ema_clear[m].update(cp)
                 self.holt_clear[m].update(cp)
                 self.clear_hist[m].append(cp)
-            req = requested.get(m, 0)
             if req <= 0:
                 continue
             raw_wr = min(1.0, obs.last_won.get(m, 0) / req)
@@ -92,6 +98,35 @@ class Memory:
                     self.premium[m] += cfg["premium_step"]
             self.premium[m] = min(cfg["premium_max"], max(cfg["premium_min"], self.premium[m]))
 
+    def _implied_clearing(self, m: str, last: Action, obs: Observation) -> Optional[float]:
+        """
+        Prezzo d'aggiudicazione NON visibile: lo deduciamo dalle nostre offerte e da cosa abbiamo vinto.
+          - pagato in media meno della nostra offerta più bassa → asta a prezzo unico: il pagato È il prezzo
+          - vinto tutto   → il prezzo era sotto la nostra offerta più bassa: proviamo a scendere
+          - vinto niente  → il prezzo era sopra la nostra offerta più alta: proviamo a salire
+          - vinto in parte → il prezzo è circa quello dell'offerta servita per ultima
+        """
+        cfg = self.cfg
+        bids = sorted((b for b in last.bids if b.material == m), key=lambda b: -b.price)
+        if not bids:
+            return None
+        req = sum(b.qty for b in bids)
+        won = obs.last_won.get(m, 0)
+        paid = obs.last_paid.get(m, 0.0)
+        lo, hi = bids[-1].price, bids[0].price
+        if won > 0 and paid / won < lo - 1e-6:
+            return paid / won
+        if won >= req:
+            return lo * (1 - cfg["probe_down"])
+        if won == 0:
+            return hi * (1 + cfg["probe_up"])
+        filled = 0
+        for b in bids:
+            filled += b.qty
+            if filled >= won:
+                return b.price
+        return lo
+
     def _update_product(self, obs: Observation, last: Action, p: str) -> None:
         cfg = self.cfg
         comp = mean(obs.last_competitor_prices.get(p) or [])
@@ -104,6 +139,9 @@ class Memory:
 
         sold = obs.last_sales.get(p, 0)
         left = obs.product_inventory.get(p, 0)
+        if not obs.info.sell_same_turn:
+            # i pezzi prodotti nel turno scorso non erano in vendita: non contano come "invenduti"
+            left = max(0, left - obs.last_produced.get(p, 0))
         my_price = last.prices.get(p)
         offered = sold + left
         if my_price is None or offered <= 0:

@@ -42,6 +42,7 @@ class GameInfo:
     salvage_value: float                     # valore di un prodotto invenduto a fine partita
     sell_same_turn: bool = True              # si vende nello stesso turno in cui si produce?
     production_after_auction: bool = True    # la produzione usa le materie prime vinte nello stesso turno?
+    auction_type: Optional[str] = None       # "pay_as_bid" | "uniform" | "second_price" | None (sconosciuto)
 
 
 @dataclass
@@ -60,6 +61,8 @@ class Observation:
     last_produced: Dict[str, int] = field(default_factory=dict)
     last_sales: Dict[str, int] = field(default_factory=dict)
     last_competitor_prices: Dict[str, List[float]] = field(default_factory=dict)
+    # --- opzionale: unità in vendita all'asta IN QUESTO turno, se il gioco le annuncia prima ---
+    current_supply: Dict[str, int] = field(default_factory=dict)
 
     @property
     def turns_left(self) -> int:

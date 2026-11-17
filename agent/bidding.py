@@ -31,16 +31,27 @@ def material_values(obs: Observation, mem: Memory, prices: Dict[str, float],
 def plan_bids(obs: Observation, mem: Memory, cfg: dict, prices: Dict[str, float],
               production: Dict[str, int]) -> List[Bid]:
     info = obs.info
-    if obs.turns_left < cfg["endgame_turns"]:
-        return []        # finale: materie prime che non faremo in tempo a usare
+    # ritardo della filiera: materiale comprato oggi → prodotto tra `a` turni → venduto dopo altri `s`
+    lag = (0 if info.production_after_auction else 1) + (0 if info.sell_same_turn else 1)
+    if obs.turns_left < max(cfg["endgame_turns"], lag):
+        return []        # finale: materie prime che non faremo in tempo a trasformare e vendere
 
-    # fabbisogno = materiali per la produzione desiderata - quelli già in magazzino
+    raw_after = dict(obs.raw_inventory)
+    if not info.production_after_auction:
+        # oggi si produce con il magazzino attuale: quello che resta serve per la produzione di domani
+        for p, q in production.items():
+            rec = info.recipes[p]
+            feasible = min([q] + [raw_after.get(m, 0) // k for m, k in rec.items()])
+            for m, k in rec.items():
+                raw_after[m] = raw_after.get(m, 0) - k * feasible
+
+    # fabbisogno = materiali per la produzione desiderata - quelli disponibili
     need: Dict[str, int] = {m: 0 for m in info.materials}
     for p, q in production.items():
         for m, per_unit in info.recipes[p].items():
             need[m] += per_unit * q
     for m in need:
-        need[m] = max(0, need[m] - obs.raw_inventory.get(m, 0))
+        need[m] = max(0, need[m] - raw_after.get(m, 0))
 
     values = material_values(obs, mem, prices, production)
     bids: List[Bid] = []
@@ -49,18 +60,26 @@ def plan_bids(obs: Observation, mem: Memory, cfg: dict, prices: Dict[str, float]
             continue
         ceiling = values[m] * cfg["bid_fraction"]          # MAI oltre questo
         forecast = mem.clearing_forecast(m)      # prezzo d'aggiudicazione previsto per questo turno
-        if forecast is None:
+        auction = info.auction_type if cfg["auto_auction_rule"] else None
+        share = cfg["bid_surplus_share_uniform"] if auction == "uniform" else cfg["bid_surplus_share"]
+        share *= _supply_factor(obs, mem, cfg, m)
+        if auction == "second_price":
+            # asta al secondo prezzo: offrire il proprio valore è la strategia dominante
+            price = ceiling
+        elif forecast is None:
             price = ceiling * cfg["first_bid_fraction"]
         elif cfg["bid_rule"] == "surplus_share" and ceiling > forecast:
             # offri sopra il prezzo previsto una QUOTA del margine che c'è tra previsione e valore:
             # più vale per noi la materia prima, più conviene non perdere l'asta
-            price = forecast + cfg["bid_surplus_share"] * (ceiling - forecast)
+            price = forecast + min(1.0, share) * (ceiling - forecast)
             price = min(ceiling, price * (1 + mem.premium[m]))
         else:
             price = min(ceiling, forecast * (1 + mem.premium[m]))
         # tetto rispetto all'ULTIMO prezzo osservato: quando il prezzo cambia direzione il trend
         # "sfora" per qualche turno, e in un'asta pay-as-bid ogni euro sopra il necessario è perso
-        last_cp = obs.last_clearing_price.get(m)
+        last_cp = obs.last_clearing_price.get(m) or (mem.clear_hist[m][-1] if mem.clear_hist[m] else None)
+        if auction == "second_price":
+            last_cp = None   # niente tetti: al secondo prezzo non si paga la propria offerta
         if cfg["bid_cap_over_last"] is not None and last_cp:
             price = min(price, last_cp * (1 + cfg["bid_cap_over_last"]))
         # anti-rincorsa: se il prezzo sale da N turni e noi non vendiamo tutto, smettiamo di inseguire.
@@ -76,3 +95,15 @@ def plan_bids(obs: Observation, mem: Memory, cfg: dict, prices: Dict[str, float]
         if low_qty > 0:
             bids.append(Bid(m, round(price * (1 - cfg["tier_discount"]), 2), low_qty))
     return bids
+
+
+def _supply_factor(obs: Observation, mem: Memory, cfg: dict, m: str) -> float:
+    """Offerta annunciata sotto la media → asta più contesa → quota più alta (e viceversa)."""
+    cur = obs.current_supply.get(m)
+    if not cur or cfg["supply_sensitivity"] <= 0:
+        return 1.0
+    hist = mem.supply_hist.get(m) or []
+    if not hist:
+        return 1.0
+    avg = sum(hist) / len(hist)
+    return max(0.5, min(2.0, (avg / cur) ** cfg["supply_sensitivity"]))
