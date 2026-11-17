@@ -107,6 +107,21 @@ def test_same_instance_two_games():
     assert ours.mem.margin == fresh.mem.margin, "la memoria non è stata resettata tra le partite"
 
 
+def test_all_scenarios_all_profiles():
+    """Ogni scenario del catalogo × ogni profilo: nessuna eccezione, nessuna azione invalida, veloce."""
+    from agent.config import PROFILES, make_config
+    from sim.opponents import league
+    from sim.scenarios import SCENARIOS
+    for name, mc in SCENARIOS.items():
+        for prof in PROFILES:
+            ours = SmartAgent("team", make_config(profile=prof), debug=True)
+            m = Market([ours] + league(7), mc, seed=7)
+            m.run()
+            assert m.errors[0] == 0, f"{name}/{prof}: eccezioni"
+            assert m.invalid[0] == 0, f"{name}/{prof}: {m.invalid[0]} azioni invalide"
+            assert m.max_time[0] < 0.1, f"{name}/{prof}: troppo lento"
+
+
 def test_fuzz_observations():
     """Osservazioni casuali e anche assurde: l'azione deve restare valida."""
     rng = random.Random(42)
@@ -115,7 +130,9 @@ def test_fuzz_observations():
                         products=["P1", "P2"], recipes={"P1": {"A": 2, "B": 1}, "P2": {"A": 1, "B": 2}},
                         labor_cost={"P1": rng.uniform(0, 20), "P2": rng.uniform(0, 20)},
                         capacity=rng.randint(0, 100), holding_cost=0.5, raw_holding_cost=0.1,
-                        salvage_value=0.0, production_after_auction=rng.random() < 0.5)
+                        salvage_value=0.0, production_after_auction=rng.random() < 0.5,
+                        sell_same_turn=rng.random() < 0.5,
+                        auction_type=rng.choice([None, "pay_as_bid", "uniform", "second_price"]))
         agent = SmartAgent("fuzz", debug=True)
         for t in range(info.n_turns):
             obs = Observation(
@@ -127,7 +144,11 @@ def test_fuzz_observations():
                                      "B": rng.choice([None, rng.uniform(0.01, 50)])} if t else {},
                 last_sales={"P1": rng.randint(0, 50), "P2": rng.randint(0, 50)} if t else {},
                 last_competitor_prices={"P1": [rng.uniform(1, 100) for _ in range(rng.randint(0, 5))],
-                                        "P2": []} if t else {},
+                                        "P2": []} if t and rng.random() < 0.7 else {},
+                last_paid={"A": rng.uniform(0, 300), "B": rng.uniform(0, 300)} if t else {},
+                last_produced={"P1": rng.randint(0, 30), "P2": rng.randint(0, 30)} if t else {},
+                last_supply={"A": rng.randint(0, 200), "B": rng.randint(0, 200)} if t else {},
+                current_supply={"A": rng.randint(0, 200), "B": rng.randint(0, 200)} if rng.random() < 0.3 else {},
             )
             a = agent.act(obs)
             _check_action(a, obs)

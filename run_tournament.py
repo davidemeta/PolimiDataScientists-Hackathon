@@ -91,6 +91,8 @@ def main():
     ap.add_argument("--turns", type=int, default=30)
     ap.add_argument("--auction", default="pay_as_bid", choices=["pay_as_bid", "uniform"])
     ap.add_argument("--set", action="append", default=[], help="override parametro: nome=valore")
+    ap.add_argument("--profile", default=None, help="profilo da agent/config.py PROFILES")
+    ap.add_argument("--scenario", default="base", help="scenario da sim/scenarios.py")
     ap.add_argument("--sweep", default=None, help='es. "bid_fraction=0.7,0.8,0.9"')
     args = ap.parse_args()
 
@@ -98,8 +100,12 @@ def main():
     for kv in args.set:
         k, v = kv.split("=", 1)
         overrides[k] = parse_value(v)
-    base_cfg = make_config(overrides)
-    market_cfg = MarketConfig(n_turns=args.turns, auction_type=args.auction)
+    base_cfg = make_config(overrides, profile=args.profile)
+    from dataclasses import replace
+    from sim.scenarios import SCENARIOS
+    market_cfg = SCENARIOS[args.scenario]
+    if args.scenario == "base":   # retrocompatibilità con --turns / --auction
+        market_cfg = replace(market_cfg, n_turns=args.turns, auction_type=args.auction)
     lineups = list(LINEUPS) if args.lineup == "all" else [args.lineup]
 
     if args.sweep:

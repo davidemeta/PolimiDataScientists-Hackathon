@@ -20,9 +20,9 @@ from agent.interface import Action, BaseAgent, Observation
 
 class SmartAgent(BaseAgent):
     def __init__(self, name: str = "team", config: Optional[dict] = None, log_path: Optional[str] = None,
-                 debug: bool = False):
+                 debug: bool = False, profile: Optional[str] = None):
         self.name = name
-        self.cfg = make_config(config)
+        self.cfg = make_config(config, profile=profile)   # profili in agent/config.py → PROFILES
         self.mem = Memory(self.cfg)
         self.logger = TurnLogger(log_path)
         self.debug = debug          # True = rilancia le eccezioni (utile in sviluppo)

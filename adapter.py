@@ -20,7 +20,9 @@ from typing import Any
 from agent.core import SmartAgent
 from agent.interface import Action, GameInfo, Observation
 
-_agent = SmartAgent(name="team", log_path="logs/live.csv")
+# PROFILO: sceglietelo con playbook.md dopo il briefing ("balanced" se non sapete nulla)
+PROFILE = "balanced"
+_agent = SmartAgent(name="team", log_path="logs/live.csv", profile=PROFILE)
 _info: GameInfo | None = None
 _prev_turn: int | None = None
 

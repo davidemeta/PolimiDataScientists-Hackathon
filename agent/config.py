@@ -10,12 +10,12 @@ DEFAULT_CONFIG = dict(
 
     # --- prezzi ---
     margin_init=0.40,              # markup iniziale sul costo di rimpiazzo
-    margin_min=0.05,               # markup minimo (fuori dal finale)
+    margin_min=0.15,               # markup minimo (fuori dal finale): mai svendere durante la partita
     margin_max=2.0,
     margin_step=0.05,              # di quanto si muove il markup per turno
     sellthrough_high=0.90,         # vendo >= 90% di quello che ho → alzo il prezzo
     sellthrough_low=0.55,          # vendo < 55% → abbasso il prezzo
-    market_band_low=0.15,          # non stare più del 15% sotto la media dei concorrenti
+    market_band_low=0.05,          # non stare più del 5% sotto la media dei concorrenti (niente guerre di prezzo)
     market_band_high=0.10,         # né più del 10% sopra
     use_demand_model=True,         # usa regressione prezzo→vendite se affidabile
     demand_min_points=6,
@@ -45,7 +45,7 @@ DEFAULT_CONFIG = dict(
     holt_beta=0.3,                 # peso del cambiamento nuovo sul trend
     holt_phi=0.9,                  # smorzamento del trend (1 = nessuno)
     bid_rule="surplus_share",      # "premium": previsione*(1+premium) | "surplus_share": previsione + quota*(tetto - previsione)
-    bid_surplus_share=0.2,         # solo surplus_share: quota del margine (tetto - previsione) aggiunta all'offerta
+    bid_surplus_share=0.3,         # solo surplus_share: quota del margine (tetto - previsione) aggiunta all'offerta
     bid_cap_over_last=0.20,        # mai offrire più del 20% sopra l'ultimo prezzo d'aggiudicazione (None = nessun tetto)
     infer_clearing=True,           # prezzo d'aggiudicazione nascosto: deducilo da offerte e vincite
     probe_down=0.08,               # ...se vinco tutto, stimo il prezzo 8% sotto la mia offerta più bassa
@@ -142,11 +142,33 @@ STABLE_CONFIG = dict(  # versione v1 (prima di Holt e domanda adattiva), congela
 )
 
 
-def make_config(overrides=None):
+# Profili: override sopra DEFAULT_CONFIG per le varianti di gioco più probabili.
+# Scelta guidata in playbook.md; i valori sono tarati con run_matrix.py (seed di taratura)
+# e verificati su seed separati.
+PROFILES = {
+    "balanced": {},                                    # non si sa niente (= DEFAULT_CONFIG, v4)
+    "rank": dict(anti_escalation=False),               # punteggio = classifica: non mollare le aste agli altri
+    "profit": dict(bid_surplus_share=0.15),            # punteggio = profitto assoluto: compra meno caro
+    # aste dove NON si paga la propria offerta (uniform / second_price): offrire vicino al valore costa poco
+    "single_price": dict(bid_surplus_share=1.0, bid_cap_over_last=None, anti_escalation=False),
+    "scarce": dict(target_stock_turns=2.0, stockout_boost_base=1.35),   # domanda > offerta: più volume
+    "glut": dict(margin_min=0.25, market_band_low=0.0),                 # guerra di prezzi: tieni il margine
+}
+
+
+def make_config(overrides=None, profile=None):
+    """Config = DEFAULT_CONFIG + profilo (opzionale) + override (opzionali)."""
     cfg = dict(DEFAULT_CONFIG)
+    layers = []
+    if profile:
+        if profile not in PROFILES:
+            raise KeyError(f"Profilo sconosciuto: {profile}. Disponibili: {list(PROFILES)}")
+        layers.append(PROFILES[profile])
     if overrides:
-        unknown = set(overrides) - set(cfg)
+        layers.append(overrides)
+    for layer in layers:
+        unknown = set(layer) - set(cfg)
         if unknown:
             raise KeyError(f"Parametri sconosciuti: {unknown}")
-        cfg.update(overrides)
+        cfg.update(layer)
     return cfg

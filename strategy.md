@@ -6,6 +6,8 @@
 
 I concetti economici citati qui sono spiegati in [knowledge_base.md](knowledge_base.md).
 
+**Dopo il briefing usate [playbook.md](playbook.md)**: indica il profilo dell'agente per ogni tipo di gioco e i parametri da ritarare.
+
 ---
 
 ## 0. Le 10 regole d'oro (da rileggere quando siete sotto pressione)

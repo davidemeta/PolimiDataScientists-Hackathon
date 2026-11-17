@@ -4,16 +4,18 @@ Questo è lo scheletro dell'agente, pronto da collegare all'API vera degli organ
 
 - Strategia complessiva: [strategy.md](strategy.md)
 - Concetti di economia: [knowledge_base.md](knowledge_base.md)
+- **Domani dopo il briefing: [playbook.md](playbook.md)**, che indica quale profilo usare per quale gioco
 
 ## Comandi
 
 ```bash
-python3 tests/test_robustness.py                 # 16 test: mai crash, mai azioni invalide
+python3 tests/test_robustness.py                 # 17 test, tutti gli scenari × profili: mai crash né azioni invalide
 python3 run_game.py --seed 3                     # una partita, log in logs/team.csv
-python3 run_tournament.py                        # torneo contro 5 gruppi di avversari
-python3 run_tournament.py --sweep "bid_fraction=0.7,0.8,0.9,1.0"   # tuning di un parametro
-python3 run_tournament.py --set margin_init=0.5 --lineup aggressive
-python3 run_tournament.py --auction uniform      # aste a prezzo uniforme invece che pay-as-bid
+python3 run_tournament.py                        # torneo contro 8 gruppi di avversari
+python3 run_tournament.py --lineup league --scenario uniform --profile single_price
+python3 run_tournament.py --sweep "bid_surplus_share=0.1,0.2,0.3,0.5" --scenario real
+python3 run_matrix.py --quick --scenario base    # quale profilo conviene? (meno di 1 secondo)
+python3 run_matrix.py                            # matrice completa 26 scenari × 6 profili (circa 15 secondi)
 ```
 
 ## Struttura
@@ -22,7 +24,7 @@ python3 run_tournament.py --auction uniform      # aste a prezzo uniforme invece
 agent/                  ← IL NOSTRO AGENTE (quello che si consegna)
   interface.py          Observation / Action / GameInfo (il "contratto" agente ↔ gioco)
   core.py               SmartAgent.act(obs): flusso del turno, try/except, fallback sicuro, reset a nuova partita
-  config.py             TUTTI i parametri (+ STABLE_CONFIG = versione consegnata)
+  config.py             TUTTI i parametri + PROFILES (balanced, rank, profit, single_price, scarce, glut) + STABLE_CONFIG (v1)
   memory.py             storia di mercato: EMA dei prezzi d'asta, dei concorrenti e delle vendite; markup adattivo; premium d'asta
   estimators.py         EMA, regressione lineare della domanda, prezzo ottimo p* = (a/b + c)/2
   pricing.py            prezzo: markup adattivo + modello di domanda + banda di mercato + esplorazione + liquidazione finale
@@ -31,10 +33,12 @@ agent/                  ← IL NOSTRO AGENTE (quello che si consegna)
   safety.py             validazione: quantità intere ≥ 0, capacità, cassa, prezzi finiti
   logger.py             CSV con una riga per turno
 sim/                    ← SOLO PER I TEST LOCALI
-  market.py             simulatore di prova (aste busta chiusa, produzione, domanda logit)
-  opponents.py          avversari: Undercutter, HighPricer, Overbidder, Random, Fixed
-adapter.py              ← DA COMPLETARE DOMANI: traduce l'API vera ↔ Observation/Action
-run_game.py, run_tournament.py, tests/
+  market.py             simulatore di prova: aste pay-as-bid/uniform/second_price, domanda logit/linear/cheapest_first,
+                        tempi della filiera, informazioni nascoste, costi
+  scenarios.py          catalogo di 26 varianti di mercato (+ dove aggiungere lo scenario "real" domani)
+  opponents.py          12 tipi di avversario + lineup casuale "league"
+adapter.py              ← DA COMPLETARE DOMANI: traduce l'API vera ↔ Observation/Action, sceglie il PROFILE
+run_game.py, run_tournament.py, run_matrix.py, tests/, playbook.md
 ```
 
 ## Domani: come collegarlo (ruolo A, circa 20 minuti)
@@ -62,34 +66,43 @@ run_game.py, run_tournament.py, tests/
 
 ## Risultati attuali (simulatore di prova)
 
-La versione di default è la **v3**. Come avversario di confronto c'è la **v1** (`STABLE_CONFIG`, congelata). Tutti i numeri qui sotto vengono da 30 partite con seed mai usati per la taratura (1000-1029).
+La versione di default è la **v4** (profilo `balanced`). Rispetto alla v3 aggiunge un pavimento ai prezzi: `margin_min=0.15` e mai più del 5% sotto la media dei concorrenti. Con questa modifica, su 23 scenari pay-as-bid con seed di verifica, il rank medio passa da 1,47 a 1,33 e il profitto da 14,1k a 14,6k.
 
-Pay-as-bid, nel formato media / minimo / rank:
+Lineup sullo scenario `base`, 20 partite:
 
-| Lineup | v1 | v2 | v3 |
-|---|---|---|---|
-| mixed | 11,1k / 1,2k / 2,57 | 17,2k / 11,4k / 1,00 | 16,5k / 10,2k / 1,00 |
-| aggressive | 18,4k / 8,6k / 1,00 | 14,3k / 9,2k / 1,00 | 12,7k / 7,4k / 1,00 |
-| passive | 26,2k / 22,6k / 1,00 | 33,0k / 28,5k / 1,00 | 34,1k / 30,7k / 1,00 |
-| come la partita d'esempio | 16,6k / 6,3k / 1,93 | 18,2k / 14,0k / 1,33 | 18,7k / 13,5k / 1,50 |
-| contro 2 copie di v2 e un undercutter | 6,8k / 4,6k / 2,80 | 7,2k / 5,2k / 2,20 | **8,8k / 6,8k / 1,73** |
+| Lineup | Media | Minimo | Rank | Vittorie |
+|---|---|---|---|---|
+| mixed | 16,7k | 11,2k | 1,05 | 19/20 |
+| aggressive | 12,8k | 4,0k | 1,00 | 20/20 |
+| passive | 38,7k | 33,9k | 1,00 | 20/20 |
+| league (3-7 avversari casuali) | 14,8k | 8,1k | 1,10 | 18/20 |
+| tough (hoarder, dumper, colluder, copycat) | 10,2k | 9,1k | 1,05 | 19/20 |
 
-Nella partita d'esempio (seed 4) i punteggi sono: v1 10,6k (2°), v2 9,5k (1°), **v3 11,7k (1°)**.
+**Robustezza agli scenari.** Prima di questo lavoro l'agente crollava in diversi scenari. Il motivo era che aveva informazioni nascoste o una filiera lenta, e non le gestiva:
 
-### Cosa è cambiato (ogni modifica ha un flag in config.py)
+| Scenario | Prima (v3) | Ora |
+|---|---|---|
+| prezzo d'aggiudicazione nascosto | 0,5k | 18,1k |
+| nessuna informazione | 0,4k | 15,3k |
+| filiera lenta (produzione da magazzino, vendita il turno dopo), rank | 3,6 | 1,1 |
+| scenario peggiore combinato, rank | 4,2 | 1,0 |
+
+Il dettaglio per scenario e profilo è in [playbook.md](playbook.md).
+
+### Storia delle versioni (ogni modifica ha un flag in config.py)
 
 | Versione | Modifica | Flag |
 |---|---|---|
-| v2 | Stima della domanda adattiva: crescita che accelera con i sold-out consecutivi, bonus se anche i concorrenti alzano i prezzi | `demand_estimator="adaptive"` |
-| v2 | Previsione del prezzo d'asta con trend (Holt) | `price_forecast="holt"` |
-| v2 | Offerta = previsione + 20% del margine tra previsione e valore massimo | `bid_rule="surplus_share"` |
-| v2 | Mai più del 20% sopra l'ultimo prezzo d'aggiudicazione | `bid_cap_over_last=0.20` |
-| v3 | **Anti-rincorsa**: se il prezzo d'asta sale da 3 turni e il nostro magazzino cresce (o vendiamo meno dell'80%), offriamo al massimo l'ultimo prezzo d'aggiudicazione, senza trend e senza premio | `anti_escalation=True` |
-| v3 | **Valore ancorato al mercato**: il valore delle materie prime si calcola sul prezzo a cui abbiamo davvero venduto tutto (+10%), non sul prezzo "costo + margine" che sale insieme al costo | `value_anchor="confirmed"` |
-| — | Premio che reagisce subito all'ultimo turno: **peggiora**, non usato | `premium_mode="fast"` |
+| v2 | Stima della domanda adattiva (crescita che accelera con i sold-out consecutivi) | `demand_estimator="adaptive"` |
+| v2 | Previsione del prezzo d'asta con trend (Holt) + offerta = previsione + quota del margine, con tetto sull'ultimo prezzo | `price_forecast`, `bid_rule`, `bid_cap_over_last` |
+| v3 | Anti-rincorsa sulle aste + valore dei materiali ancorato al prezzo confermato dal mercato | `anti_escalation`, `value_anchor` |
+| v4 | Prezzo d'aggiudicazione nascosto dedotto dalle proprie vincite | `infer_clearing`, `probe_down`, `probe_up` |
+| v4 | Ritardo della filiera: acquisti, produzione e finale coerenti con `sell_same_turn` / `production_after_auction` | automatico |
+| v4 | Tipo d'asta noto → regola d'offerta automatica; offerta annunciata → offerte più o meno aggressive | `auto_auction_rule`, `supply_sensitivity` |
+| v4 | Pavimento ai prezzi: niente guerre di prezzo | `margin_min=0.15`, `market_band_low=0.05` |
 
 ### Attenzione
 
-- **Profitto o classifica?** La v3 compra meno durante le rincorse, quindi in media guadagna di più contro avversari che rincorrono. Però può lasciare materie prime ai rivali. Con le aste uniform, contro copie della v2, il profitto passa da 9,0k a 10,4k ma il rank peggiora da 1,97 a 2,57. Se domani il punteggio è la **classifica relativa**, provate `anti_escalation=False`. Se è il **profitto assoluto**, tenetela.
-- **Il trend sbaglia ancora quando il prezzo cambia direzione.** Al turno 10 della partita d'esempio offriamo 24,3 quando l'asta si chiude a 16,9. Il tetto del +20% sull'ultimo prezzo limita il danno ma non lo elimina.
-- I valori sono tarati sul simulatore di prova. Domani vanno ritarati su quello vero.
+- **Profitto o classifica?** L'anti-rincorsa protegge il profitto ma può lasciare materie prime ai rivali. Se il punteggio è la classifica, usate il profilo `rank` (`anti_escalation=False`).
+- **`single_price` va usato solo con aste uniform o second_price.** Con le aste pay-as-bid è disastroso.
+- I valori sono tarati sul simulatore di prova. Domani vanno ritarati con lo scenario `real` (vedi playbook §3).
